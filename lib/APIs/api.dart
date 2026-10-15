@@ -53,46 +53,59 @@ class SaavnAPI {
   };
 
   Future<Response> getResponse(
-    String params, {
+    dynamic params, {
     bool usev4 = true,
     bool useProxy = false,
   }) async {
-    Uri url;
-    if (!usev4) {
-      url = Uri.https(
-        baseUrl,
-        '$apiStr&$params'.replaceAll('&api_version=4', ''),
-      );
-    } else {
-      url = Uri.https(baseUrl, '$apiStr&$params');
+    final queryParams = <String, String>{
+      '_format': 'json',
+      '_marker': '0',
+      'ctx': 'web6dot0',
+    };
+    if (usev4) {
+      queryParams['api_version'] = '4';
     }
+
+    if (params is Map<String, String>) {
+      queryParams.addAll(params);
+    } else if (params is Map) {
+      params.forEach((key, value) {
+        queryParams[key.toString()] = value.toString();
+      });
+    } else {
+      final parsedStringParams = Uri.splitQueryString(params.toString());
+      queryParams.addAll(parsedStringParams);
+    }
+
+    final Uri url = Uri.https(baseUrl, '/api.php', queryParams);
+
     preferredLanguages =
         preferredLanguages.map((lang) => lang.toLowerCase()).toList();
     final String languageHeader = 'L=${preferredLanguages.join('%2C')}';
-    headers = {'cookie': languageHeader, 'Accept': '*/*'};
+    headers = {
+      'cookie': languageHeader,
+      'Accept': '*/*',
+      'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    };
 
-    if (useProxy && settingsBox.get('useProxy', defaultValue: false) as bool) {
-      final String proxyIP = settingsBox.get('proxyIp').toString();
-      // final proxyPort = settingsBox.get('proxyPort');
-      // final HttpClient httpClient = HttpClient();
-      // httpClient.findProxy = (uri) {
-      //   return 'PROXY $proxyIP:$proxyPort;';
-      // };
-      // httpClient.badCertificateCallback =
-      //     (X509Certificate cert, String host, int port) => Platform.isAndroid;
-      // final IOClient myClient = IOClient(httpClient);
-      // return myClient.get(url, headers: headers);
-      final proxyHeaders = headers;
-      proxyHeaders['X-FORWARDED-FOR'] = proxyIP;
-      return get(url, headers: proxyHeaders).onError((error, stackTrace) {
-        return Response(
-          {
-            'status': 'failure',
-            'error': error.toString(),
-          }.toString(),
-          404,
-        );
-      });
+    if (useProxy &&
+        settingsBox.get('useProxy', defaultValue: false) as bool &&
+        settingsBox.get('proxyIp', defaultValue: '').toString().trim().isNotEmpty) {
+      final String proxyIP = settingsBox.get('proxyIp').toString().trim();
+      if (proxyIP != '103.47.67.134') {
+        final proxyHeaders = Map<String, String>.from(headers);
+        proxyHeaders['X-FORWARDED-FOR'] = proxyIP;
+        return get(url, headers: proxyHeaders).onError((error, stackTrace) {
+          return Response(
+            {
+              'status': 'failure',
+              'error': error.toString(),
+            }.toString(),
+            404,
+          );
+        });
+      }
     }
     return get(url, headers: headers).onError((error, stackTrace) {
       return Response(
@@ -108,7 +121,7 @@ class SaavnAPI {
   Future<Map> fetchHomePageData() async {
     Map result = {};
     try {
-      final res = await getResponse(endpoints['homeData']!);
+      final res = await getResponse({'__call': 'webapi.getLaunchData'});
       if (res.statusCode == 200) {
         final Map data = json.decode(res.body) as Map;
         result = await FormatResponse.formatHomePageData(data);
@@ -126,15 +139,25 @@ class SaavnAPI {
     int p = 1,
   }) async {
     if (n == -1) {
-      final String params =
-          "token=$token&type=$type&n=5&p=$p&${endpoints['fromToken']}";
+      final Map<String, String> params = {
+        '__call': 'webapi.get',
+        'token': token,
+        'type': type,
+        'n': '5',
+        'p': p.toString(),
+      };
       try {
         final res = await getResponse(params);
         if (res.statusCode == 200) {
           final Map getMain = json.decode(res.body) as Map;
           final String count = getMain['list_count'].toString();
-          final String params2 =
-              "token=$token&type=$type&n=$count&p=$p&${endpoints['fromToken']}";
+          final Map<String, String> params2 = {
+            '__call': 'webapi.get',
+            'token': token,
+            'type': type,
+            'n': count,
+            'p': p.toString(),
+          };
           final res2 = await getResponse(params2);
           if (res2.statusCode == 200) {
             final Map getMain2 = json.decode(res2.body) as Map;
@@ -152,8 +175,13 @@ class SaavnAPI {
       }
       return {'songs': List.empty()};
     } else {
-      final String params =
-          "token=$token&type=$type&n=$n&p=$p&${endpoints['fromToken']}";
+      final Map<String, String> params = {
+        '__call': 'webapi.get',
+        'token': token,
+        'type': type,
+        'n': n.toString(),
+        'p': p.toString(),
+      };
       try {
         final res = await getResponse(params);
         if (res.statusCode == 200) {
@@ -194,7 +222,10 @@ class SaavnAPI {
   }
 
   Future<List> getReco(String pid) async {
-    final String params = "${endpoints['getReco']}&pid=$pid";
+    final Map<String, String> params = {
+      '__call': 'reco.getreco',
+      'pid': pid,
+    };
     final res = await getResponse(params);
     if (res.statusCode == 200 && res.body.isNotEmpty) {
       final List getMain = json.decode(res.body) as List;
@@ -212,21 +243,29 @@ class SaavnAPI {
     required String stationType,
     String? language,
   }) async {
-    String? params;
+    Map<String, String> params;
     if (stationType == 'featured') {
-      params =
-          "name=${names[0]}&language=$language&${endpoints['featuredRadio']}";
-    }
-    if (stationType == 'artist') {
-      params =
-          "name=${names[0]}&query=${names[0]}&language=$language&${endpoints['artistRadio']}";
-    }
-    if (stationType == 'entity') {
-      params =
-          'entity_id=${names.map((e) => '"$e"').toList()}&entity_type=queue&${endpoints["entityRadio"]}';
+      params = {
+        '__call': 'webradio.createFeaturedStation',
+        'name': names[0],
+        if (language != null && language.isNotEmpty) 'language': language,
+      };
+    } else if (stationType == 'artist') {
+      params = {
+        '__call': 'webradio.createArtistStation',
+        'name': names[0],
+        'query': names[0],
+        if (language != null && language.isNotEmpty) 'language': language,
+      };
+    } else {
+      params = {
+        '__call': 'webradio.createEntityStation',
+        'entity_id': jsonEncode(names),
+        'entity_type': 'queue',
+      };
     }
 
-    final res = await getResponse(params!);
+    final res = await getResponse(params);
     if (res.statusCode == 200) {
       final Map getMain = json.decode(res.body) as Map;
       return getMain['stationid']?.toString();
@@ -240,8 +279,12 @@ class SaavnAPI {
     int next = 1,
   }) async {
     if (count > 0) {
-      final String params =
-          "stationid=$stationId&k=$count&next=$next&${endpoints['radioSongs']}";
+      final Map<String, String> params = {
+        '__call': 'webradio.getSong',
+        'stationid': stationId,
+        'k': count.toString(),
+        'next': next.toString(),
+      };
       final res = await getResponse(params);
       if (res.statusCode == 200) {
         final Map getMain = json.decode(res.body) as Map;
@@ -258,7 +301,10 @@ class SaavnAPI {
 
   Future<List<String>> getTopSearches() async {
     try {
-      final res = await getResponse(endpoints['topSearches']!, useProxy: true);
+      final res = await getResponse(
+        {'__call': 'content.getTopSearches'},
+        useProxy: true,
+      );
       if (res.statusCode == 200) {
         final List getMain = json.decode(res.body) as List;
         return getMain.map((element) {
@@ -276,8 +322,12 @@ class SaavnAPI {
     int count = 20,
     int page = 1,
   }) async {
-    final String params =
-        "p=$page&q=$searchQuery&n=$count&${endpoints['getResults']}";
+    final Map<String, String> params = {
+      '__call': 'search.getResults',
+      'p': page.toString(),
+      'q': searchQuery,
+      'n': count.toString(),
+    };
 
     try {
       final res = await getResponse(params, useProxy: true);
@@ -311,11 +361,13 @@ class SaavnAPI {
     List searchedPlaylistList = [];
     List searchedArtistList = [];
     List searchedTopQueryList = [];
-    // List searchedShowList = [];
-    // List searchedEpisodeList = [];
 
-    final String params =
-        '__call=autocomplete.get&cc=in&includeMetaTags=1&query=$searchQuery';
+    final Map<String, String> params = {
+      '__call': 'autocomplete.get',
+      'cc': 'in',
+      'includeMetaTags': '1',
+      'query': searchQuery,
+    };
 
     final res = await getResponse(params, usev4: false, useProxy: true);
     if (res.statusCode == 200) {
@@ -328,12 +380,6 @@ class SaavnAPI {
 
       final List artistResponseList = getMain['artists']['data'] as List;
       position[getMain['artists']['position'] as int] = 'Artists';
-
-      // final List showResponseList = getMain['shows']['data'] as List;
-      // position[getMain['shows']['position'] as int] = 'Podcasts';
-
-      // final List episodeResponseList = getMain['episodes']['data'] as List;
-      // position[getMain['episodes']['position'] as int] = 'Episodes';
 
       final List topQuery = getMain['topquery']['data'] as List;
 
@@ -350,18 +396,6 @@ class SaavnAPI {
       if (searchedPlaylistList.isNotEmpty) {
         result['Playlists'] = searchedPlaylistList;
       }
-
-      // searchedShowList =
-      //     await FormatResponse().formatAlbumResponse(showResponseList, 'show');
-      // if (searchedShowList.isNotEmpty) {
-      //   result['Podcasts'] = searchedShowList;
-      // }
-
-      // searchedEpisodeList = await FormatResponse()
-      //     .formatAlbumResponse(episodeResponseList, 'episode');
-      // if (searchedEpisodeList.isNotEmpty) {
-      //   result['Episodes'] = searchedEpisodeList;
-      // }
 
       searchedArtistList = await FormatResponse.formatAlbumResponse(
         artistResponseList,
@@ -414,19 +448,23 @@ class SaavnAPI {
     int count = 20,
     int page = 1,
   }) async {
-    String? params;
+    String call = 'search.albumResults';
     if (type == 'playlist') {
-      params =
-          'p=$page&q=$searchQuery&n=$count&${endpoints["playlistResults"]}';
-    }
-    if (type == 'album') {
-      params = 'p=$page&q=$searchQuery&n=$count&${endpoints["albumResults"]}';
-    }
-    if (type == 'artist') {
-      params = 'p=$page&q=$searchQuery&n=$count&${endpoints["artistResults"]}';
+      call = 'search.playlistResults';
+    } else if (type == 'artist') {
+      call = 'search.artistResults';
+    } else if (type == 'album') {
+      call = 'search.albumResults';
     }
 
-    final res = await getResponse(params!);
+    final Map<String, String> params = {
+      '__call': call,
+      'p': page.toString(),
+      'q': searchQuery,
+      'n': count.toString(),
+    };
+
+    final res = await getResponse(params);
     if (res.statusCode == 200) {
       final getMain = json.decode(res.body);
       final List responseList = getMain['results'] as List;
@@ -436,7 +474,11 @@ class SaavnAPI {
   }
 
   Future<Map> fetchAlbumSongs(String albumId) async {
-    final String params = '${endpoints['albumDetails']}&cc=in&albumid=$albumId';
+    final Map<String, String> params = {
+      '__call': 'content.getAlbumDetails',
+      'cc': 'in',
+      'albumid': albumId,
+    };
     try {
       final res = await getResponse(params);
       if (res.statusCode == 200) {
@@ -470,8 +512,18 @@ class SaavnAPI {
     String sortOrder = '',
   }) async {
     final Map<String, List> data = {};
-    final String params =
-        '${endpoints["fromToken"]}&type=artist&p=&n_song=50&n_album=50&sub_type=&category=$category&sort_order=$sortOrder&includeMetaTags=0&token=$artistToken';
+    final Map<String, String> params = {
+      '__call': 'webapi.get',
+      'type': 'artist',
+      'p': '',
+      'n_song': '50',
+      'n_album': '50',
+      'sub_type': '',
+      'category': category,
+      'sort_order': sortOrder,
+      'includeMetaTags': '0',
+      'token': artistToken,
+    };
     final res = await getResponse(params);
     if (res.statusCode == 200) {
       final getMain = json.decode(res.body) as Map;
@@ -555,8 +607,11 @@ class SaavnAPI {
   }
 
   Future<Map> fetchPlaylistSongs(String playlistId) async {
-    final String params =
-        '${endpoints["playlistDetails"]}&cc=in&listid=$playlistId';
+    final Map<String, String> params = {
+      '__call': 'playlist.getDetails',
+      'cc': 'in',
+      'listid': playlistId,
+    };
     try {
       final res = await getResponse(params);
       if (res.statusCode == 200) {
@@ -591,7 +646,12 @@ class SaavnAPI {
   }
 
   Future<List> fetchTopSearchResult(String searchQuery) async {
-    final String params = 'p=1&q=$searchQuery&n=10&${endpoints["getResults"]}';
+    final Map<String, String> params = {
+      '__call': 'search.getResults',
+      'p': '1',
+      'q': searchQuery,
+      'n': '10',
+    };
     final res = await getResponse(params, useProxy: true);
     if (res.statusCode == 200) {
       final getMain = json.decode(res.body);
@@ -604,7 +664,10 @@ class SaavnAPI {
   }
 
   Future<Map> fetchSongDetails(String songId) async {
-    final String params = 'pids=$songId&${endpoints["songDetails"]}';
+    final Map<String, String> params = {
+      '__call': 'song.getDetails',
+      'pids': songId,
+    };
     try {
       final res = await getResponse(params);
       if (res.statusCode == 200) {
@@ -618,4 +681,5 @@ class SaavnAPI {
     }
     return {};
   }
+
 }
