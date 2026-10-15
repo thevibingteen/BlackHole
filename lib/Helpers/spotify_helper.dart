@@ -23,35 +23,41 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 Future<String?> retriveAccessToken() async {
-  String? accessToken = Hive.box('settings')
-      .get('spotifyAccessToken', defaultValue: null)
-      ?.toString();
-  String? refreshToken = Hive.box('settings')
-      .get('spotifyRefreshToken', defaultValue: null)
-      ?.toString();
-  final double expiredAt = Hive.box('settings')
-      .get('spotifyTokenExpireAt', defaultValue: 0.0) as double;
-
-  if (accessToken == null || refreshToken == null) {
-    return null;
-  } else {
-    final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
-    if ((currentTime + 60) >= expiredAt) {
-      final List<String> data =
-          await SpotifyApi().getAccessToken(refreshToken: refreshToken);
-      if (data.isNotEmpty) {
-        Hive.box('settings').put('spotifySigned', true);
-        accessToken = data[0];
-        Hive.box('settings').put('spotifyAccessToken', data[0]);
-        if (data[1] != 'null') {
-          refreshToken = data[1];
-          Hive.box('settings').put('spotifyRefreshToken', data[1]);
-        }
-        Hive.box('settings')
-            .put('spotifyTokenExpireAt', currentTime + double.parse(data[2]));
-      }
+  try {
+    if (!Hive.isBoxOpen('settings')) {
+      return null;
     }
-    return accessToken;
+    final box = Hive.box('settings');
+    String? accessToken =
+        box.get('spotifyAccessToken', defaultValue: null)?.toString();
+    String? refreshToken =
+        box.get('spotifyRefreshToken', defaultValue: null)?.toString();
+    final double expiredAt =
+        ((box.get('spotifyTokenExpireAt', defaultValue: 0.0) as num?) ?? 0.0)
+            .toDouble();
+
+    if (accessToken == null || refreshToken == null) {
+      return null;
+    } else {
+      final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
+      if ((currentTime + 60) >= expiredAt) {
+        final List<String> data =
+            await SpotifyApi().getAccessToken(refreshToken: refreshToken);
+        if (data.isNotEmpty) {
+          box.put('spotifySigned', true);
+          accessToken = data[0];
+          box.put('spotifyAccessToken', data[0]);
+          if (data[1] != 'null') {
+            refreshToken = data[1];
+            box.put('spotifyRefreshToken', data[1]);
+          }
+          box.put('spotifyTokenExpireAt', currentTime + double.parse(data[2]));
+        }
+      }
+      return accessToken;
+    }
+  } catch (e) {
+    return null;
   }
 }
 

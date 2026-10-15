@@ -20,6 +20,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:hive/hive.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 
@@ -32,8 +33,21 @@ class SpotifyApi {
   ];
 
   /// You can signup for spotify developer account and get your own clientID and clientSecret incase you don't want to use these
-  final String clientID = 'fcaf490c5719430595cd17c577c04489';
-  final String clientSecret = '8a62961b8e614cb38e99c4d9a7ebf5ca';
+  String get clientID {
+    if (Hive.isBoxOpen('settings')) {
+      final custom = Hive.box('settings').get('spotifyClientId')?.toString().trim();
+      if (custom != null && custom.isNotEmpty) return custom;
+    }
+    return 'fcaf490c5719430595cd17c577c04489';
+  }
+
+  String get clientSecret {
+    if (Hive.isBoxOpen('settings')) {
+      final custom = Hive.box('settings').get('spotifyClientSecret')?.toString().trim();
+      if (custom != null && custom.isNotEmpty) return custom;
+    }
+    return '8a62961b8e614cb38e99c4d9a7ebf5ca';
+  }
   final String redirectUrl = 'app://blackhole/auth';
   final String spotifyApiUrl = 'https://accounts.spotify.com/api';
   final String spotifyApiBaseUrl = 'https://api.spotify.com/v1';
@@ -67,6 +81,10 @@ class SpotifyApi {
     String? code,
     String? refreshToken,
   }) async {
+    if (clientID.isEmpty || clientSecret.isEmpty) {
+      Logger.root.info('Spotify client credentials not configured.');
+      return [];
+    }
     final Map<String, String> headers = {
       'Authorization':
           "Basic ${base64.encode(utf8.encode("$clientID:$clientSecret"))}",

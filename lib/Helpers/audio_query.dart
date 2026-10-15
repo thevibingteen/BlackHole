@@ -28,10 +28,11 @@ class OfflineAudioQuery {
   static OnAudioQuery audioQuery = OnAudioQuery();
   static final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
 
-  Future<void> requestPermission() async {
-    while (!await audioQuery.permissionsStatus()) {
-      await audioQuery.permissionsRequest();
+  Future<bool> requestPermission() async {
+    if (await audioQuery.permissionsStatus()) {
+      return true;
     }
+    return audioQuery.permissionsRequest();
   }
 
   Future<List<SongModel>> getSongs({

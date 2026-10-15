@@ -24,10 +24,11 @@ import 'package:audiotagger/models/tag.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/Helpers/lyrics.dart';
 import 'package:blackhole/Services/ext_storage_provider.dart';
+import 'package:blackhole/Services/youtube_services.dart';
+import 'package:blackhole/localization/app_localizations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 // import 'package:flutter_downloader/flutter_downloader.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive/hive.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
@@ -390,7 +391,35 @@ class Download with ChangeNotifier {
 
     Logger.root.info('Connecting to Client');
     final client = Client();
-    final response = await client.send(Request('GET', Uri.parse(kUrl)));
+    StreamedResponse response =
+        await client.send(Request('GET', Uri.parse(kUrl)));
+
+    if (response.statusCode == 403 &&
+        data['url'].toString().contains('google') &&
+        data['id'] != null) {
+      Logger.root.info('Download received 403, refreshing YouTube link...');
+      final freshData =
+          await YouTubeServices().refreshLink(data['id'].toString());
+      if (freshData != null &&
+          freshData['url'] != null &&
+          freshData['url'].toString().isNotEmpty) {
+        kUrl = freshData['url'].toString();
+        response = await client.send(Request('GET', Uri.parse(kUrl)));
+      }
+    }
+
+    if (response.statusCode != 200) {
+      Logger.root.severe('Download failed with HTTP ${response.statusCode}');
+      progress = 0.0;
+      notifyListeners();
+      try {
+        if (filepath != null) await File(filepath!).delete();
+        await File(filepath2).delete();
+      } catch (_) {}
+      client.close();
+      return;
+    }
+
     final int total = response.contentLength ?? 0;
     int recieved = 0;
     Logger.root.info('Client connected, Starting download');

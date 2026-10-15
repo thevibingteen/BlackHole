@@ -47,7 +47,9 @@ class ExtStorageProvider {
     try {
       // checking platform
       if (Platform.isAndroid) {
-        if (await requestPermission(Permission.storage)) {
+        final hasStorage = await requestPermission(Permission.storage);
+        final hasAudio = await requestPermission(Permission.audio);
+        if (hasStorage || hasAudio) {
           directory = await getExternalStorageDirectory();
 
           // getting main path
