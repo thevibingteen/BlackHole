@@ -189,17 +189,18 @@ class PlayerInvoke {
   static Future<void> refreshYtLink(Map playItem) async {
     // final bool cacheSong =
     // Hive.box('settings').get('cacheSong', defaultValue: true) as bool;
-    final int expiredAt = int.parse((playItem['expire_at'] ?? '0').toString());
-    if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 > expiredAt) {
+    final int expiredAt =
+        int.tryParse((playItem['expire_at'] ?? '0').toString()) ?? 0;
+    if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600 > expiredAt) {
       Logger.root.info(
         'before service | youtube link expired for ${playItem["title"]}',
       );
       if (Hive.box('ytlinkcache').containsKey(playItem['id'])) {
         final Map cache =
             await Hive.box('ytlinkcache').get(playItem['id']) as Map;
-        final int expiredAt = int.parse((cache['expire_at'] ?? '0').toString());
-        // final String wasCacheEnabled = cache['cached'].toString();
-        if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 > expiredAt) {
+        final int expiredAt =
+            int.tryParse((cache['expire_at'] ?? '0').toString()) ?? 0;
+        if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600 > expiredAt) {
           Logger.root
               .info('youtube link expired in cache for ${playItem["title"]}');
           final newData =
