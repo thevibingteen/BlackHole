@@ -60,7 +60,7 @@ class AppTheme {
                   : Brightness.dark,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         clipBehavior: Clip.antiAlias,
         elevation: 5,
         shape: RoundedRectangleBorder(
@@ -120,7 +120,7 @@ class AppTheme {
       ),
       canvasColor: currentTheme.getCanvasColor(),
       cardColor: currentTheme.getCardColor(),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         clipBehavior: Clip.antiAlias,
         elevation: 5,
         shape: RoundedRectangleBorder(

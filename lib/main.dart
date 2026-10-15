@@ -39,11 +39,12 @@ import 'package:blackhole/Screens/Login/pref.dart';
 import 'package:blackhole/Screens/Player/audioplayer.dart';
 import 'package:blackhole/Screens/Settings/new_settings_page.dart';
 import 'package:blackhole/Services/audio_service.dart';
+import 'package:blackhole/Services/youtube_services.dart';
+import 'package:blackhole/localization/app_localizations.dart';
 import 'package:blackhole/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -54,7 +55,6 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Paint.enableDithering = true;
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await Hive.initFlutter('BlackHole');
@@ -67,6 +67,7 @@ Future<void> main() async {
   await openHiveBox('Favorite Songs');
   await openHiveBox('cache', limit: true);
   await openHiveBox('ytlinkcache', limit: true);
+  YouTubeServices.pruneExpiredCache();
   if (Platform.isAndroid) {
     setOptimalDisplayMode();
   }

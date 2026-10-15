@@ -27,7 +27,7 @@ import 'package:blackhole/Services/youtube_services.dart';
 import 'package:blackhole/Services/yt_music.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:blackhole/localization/app_localizations.dart';
 import 'package:logging/logging.dart';
 
 class YouTubeArtist extends StatefulWidget {
