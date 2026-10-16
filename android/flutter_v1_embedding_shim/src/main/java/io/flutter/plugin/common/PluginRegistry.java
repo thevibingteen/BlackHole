@@ -9,8 +9,8 @@ import android.content.Context;
 import android.content.Intent;
 import io.flutter.plugin.platform.PlatformViewRegistry;
 import io.flutter.view.FlutterNativeView;
-import io.flutter.view.FlutterView;
 import io.flutter.view.TextureRegistry;
+import io.flutter.view.FlutterView;
 
 /**
  * Compatibility shim providing the legacy Flutter Android v1 embedding PluginRegistry
