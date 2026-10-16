@@ -50,7 +50,7 @@ subprojects {
                 task.doFirst {
                     def shimTask = rootProject.findProject(':flutter_v1_embedding_shim')?.tasks?.findByName('compileReleaseJavaWithJavac')
                     if (shimTask != null) {
-                        task.classpath = project.files(shimTask.destinationDirectory) + task.classpath
+                        task.classpath = task.classpath + project.files(shimTask.destinationDirectory)
                     }
                     task.source.each { file ->
                         if (file.name == 'AudiotaggerPlugin.java') {
