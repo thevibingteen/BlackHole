@@ -93,34 +93,34 @@ packages:
     dependency: "direct main"
     description:
       name: cached_network_image
-      sha256: fd3d0dc1d451f9a252b32d95d3f0c3c487bc41a75eba2e6097cb0b9c71491b15
+      sha256: "28ea9690a8207179c319965c13cd8df184d5ee721ae2ce60f398ced1219cea1f"
       url: "https://pub.dev"
     source: hosted
-    version: "3.2.3"
+    version: "3.3.1"
   cached_network_image_platform_interface:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: cached_network_image_platform_interface
-      sha256: bb2b8403b4ccdc60ef5f25c70dead1f3d32d24b9d6117cfc087f496b178594a7
+      sha256: "9e90e78ae72caa874a323d78fa6301b3fb8fa7ea76a8f96dc5b5bf79f283bf2f"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.0"
+    version: "4.0.0"
   cached_network_image_web:
     dependency: transitive
     description:
       name: cached_network_image_web
-      sha256: b8eb814ebfcb4dea049680f8c1ffb2df399e4d03bf7a352c775e26fa06e02fa0
+      sha256: "205d6a9f1862de34b93184f22b9d2d94586b2f05c581d546695e3d8f6a805cd7"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.2"
+    version: "1.2.0"
   carousel_slider:
     dependency: "direct main"
     description:
       name: carousel_slider
-      sha256: "9c695cc963bf1d04a47bd6021f68befce8970bcd61d24938e1fb0918cf5d9c42"
+      sha256: febf4b0163e0242adc13d7a863b04965351f59e7dfea56675c7c2caa7bcd7476
       url: "https://pub.dev"
     source: hosted
-    version: "4.2.1"
+    version: "5.1.2"
   characters:
     dependency: transitive
     description:
@@ -250,13 +250,13 @@ packages:
     source: hosted
     version: "7.0.0"
   fading_edge_scrollview:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: fading_edge_scrollview
-      sha256: c25c2231652ce774cc31824d0112f11f653881f43d7f5302c05af11942052031
+      sha256: "1f84fe3ea8e251d00d5735e27502a6a250e4aa3d3b330d3fdcb475af741464ef"
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.0"
+    version: "4.1.1"
   fake_async:
     dependency: transitive
     description:
@@ -269,10 +269,10 @@ packages:
     dependency: transitive
     description:
       name: ffi
-      sha256: ed5337a5660c506388a9f012be0288fb38b49020ce2b45fe1f8b8323fe429f99
+      sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.2"
+    version: "2.2.0"
   file:
     dependency: transitive
     description:
@@ -311,13 +311,13 @@ packages:
     source: hosted
     version: "5.0.0"
   flutter_blurhash:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: flutter_blurhash
-      sha256: "05001537bd3fac7644fa6558b09ec8c0a3f2eba78c0765f88912882b1331a5c6"
+      sha256: "5e67678e479ac639069d7af1e133f4a4702311491188ff3e0227486430db0c06"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.0"
+    version: "0.8.2"
   flutter_cache_manager:
     dependency: transitive
     description:
@@ -569,10 +569,10 @@ packages:
     dependency: "direct main"
     description:
       name: material_design_icons_flutter
-      sha256: "06e34d0d6da622faa900cf59801f10c89787014a834ab391e9fad0895e6f0baf"
+      sha256: "6f986b7a51f3ad4c00e33c5c84e8de1bdd140489bbcdc8b66fc1283dad4dea5a"
       url: "https://pub.dev"
     source: hosted
-    version: "5.0.5955-rc.1"
+    version: "7.0.7296"
   meta:
     dependency: transitive
     description:
@@ -614,13 +614,13 @@ packages:
     source: hosted
     version: "0.5.0"
   octo_image:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: octo_image
-      sha256: "107f3ed1330006a3bea63615e81cf637433f5135a52466c7caa0e7152bca9143"
+      sha256: "49c4f93afc10f1ad4fdef9db88fed9c65a8eb5d9ad0a4fa9b128d7fedeb41418"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.2"
+    version: "2.1.2"
   on_audio_query:
     dependency: "direct main"
     description:
@@ -1139,13 +1139,13 @@ packages:
     source: hosted
     version: "2.4.0"
   win32:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: win32
-      sha256: "7dacfda1edcca378031db9905ad7d7bd56b29fd1a90b0908b71a52a12c41e36b"
+      sha256: d7cb55e04cd34096cd3a79b3330245f54cb96a370a1c27adb3c84b917de8b08e
       url: "https://pub.dev"
     source: hosted
-    version: "5.0.3"
+    version: "5.15.0"
   win32_registry:
     dependency: transitive
     description:

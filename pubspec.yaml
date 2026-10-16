@@ -16,7 +16,7 @@ dependencies:
   audiotagger: ^2.2.0
   # bitsdojo_window: ^0.1.1+1 #For Desktops
   cached_network_image: ^3.2.3
-  carousel_slider: ^4.2.1
+  carousel_slider: ^5.0.0
   connectivity_plus: ^4.0.1
   crypto: ^3.0.3
   cupertino_icons: ^1.0.5
@@ -41,7 +41,7 @@ dependencies:
   # just_audio_libwinmedia: ^0.0.4 # For windows and linux.
   logging: ^1.2.0
   marquee: ^2.2.3
-  material_design_icons_flutter: 5.0.5955-rc.1
+  material_design_icons_flutter: ^7.0.7296
   metadata_god: ^0.4.1
   on_audio_query: ^2.9.0
   package_info_plus: ^4.0.2
@@ -61,6 +61,14 @@ dev_dependencies:
     sdk: flutter
   lint: ^2.1.2
   msix: ^3.14.2
+
+dependency_overrides:
+  cached_network_image: ^3.3.1
+  cached_network_image_platform_interface: ^4.0.0
+  octo_image: ^2.1.0
+  flutter_blurhash: ^0.8.2
+  fading_edge_scrollview: ^4.1.1
+  win32: ^5.15.0
 
 flutter:
   uses-material-design: true
