@@ -117,10 +117,10 @@ packages:
     dependency: "direct main"
     description:
       name: carousel_slider
-      sha256: "9c695cc963bf1d04a47bd6021f68befce8970bcd61d24938e1fb0918cf5d9c42"
+      sha256: febf4b0163e0242adc13d7a863b04965351f59e7dfea56675c7c2caa7bcd7476
       url: "https://pub.dev"
     source: hosted
-    version: "4.2.1"
+    version: "5.1.2"
   characters:
     dependency: transitive
     description:
@@ -356,13 +356,13 @@ packages:
     source: hosted
     version: "2.0.14"
   flutter_rust_bridge:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: flutter_rust_bridge
-      sha256: e12415c3bce49bcbc3fed383f0ea41ad7d828f6cf0eccba0588ffa5a812fe522
+      sha256: a2ff791f96ed03be0d4a8d249130688371ab3612ef95efeddef23600b904a1ef
       url: "https://pub.dev"
     source: hosted
-    version: "1.82.1"
+    version: "1.81.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -568,10 +568,9 @@ packages:
   material_design_icons_flutter:
     dependency: "direct main"
     description:
-      name: material_design_icons_flutter
-      sha256: "06e34d0d6da622faa900cf59801f10c89787014a834ab391e9fad0895e6f0baf"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/material_design_icons_flutter"
+      relative: true
+    source: path
     version: "5.0.5955-rc.1"
   meta:
     dependency: transitive
