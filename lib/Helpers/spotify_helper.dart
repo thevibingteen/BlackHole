@@ -20,6 +20,7 @@
 import 'package:app_links/app_links.dart';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:logging/logging.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 Future<String?> retriveAccessToken() async {
@@ -70,9 +71,18 @@ Future<void> callSpotifyFunction({
     return await function.call(accessToken);
   }
   if (accessToken == null && forceSign) {
+    if (SpotifyApi().clientID.isEmpty) {
+      Logger.root.info('Spotify client credentials not configured, skipping authorization launch');
+      return;
+    }
+    final verifier = SpotifyApi.generateCodeVerifier();
+    final challenge = SpotifyApi.generateCodeChallenge(verifier);
+    if (Hive.isBoxOpen('settings')) {
+      Hive.box('settings').put('spotifyCodeVerifier', verifier);
+    }
     launchUrl(
       Uri.parse(
-        SpotifyApi().requestAuthorization(),
+        SpotifyApi().requestAuthorization(codeChallenge: challenge),
       ),
       mode: LaunchMode.externalApplication,
     );
@@ -81,11 +91,18 @@ Future<void> callSpotifyFunction({
       (uri) async {
         final link = uri.toString();
         if (link.contains('code=')) {
-          final code = link.split('code=')[1];
+          final uriParsed = Uri.parse(link);
+          final code = uriParsed.queryParameters['code'] ??
+              link.split('code=')[1].split('&')[0];
           Hive.box('settings').put('spotifyAppCode', code);
+          final String? storedVerifier = Hive.isBoxOpen('settings')
+              ? Hive.box('settings').get('spotifyCodeVerifier')?.toString()
+              : null;
           final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
-          final List<String> data =
-              await SpotifyApi().getAccessToken(code: code);
+          final List<String> data = await SpotifyApi().getAccessToken(
+            code: code,
+            codeVerifier: storedVerifier,
+          );
           if (data.isNotEmpty) {
             Hive.box('settings').put('spotifyAccessToken', data[0]);
             Hive.box('settings').put('spotifyRefreshToken', data[1]);

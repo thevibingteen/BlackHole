@@ -168,13 +168,12 @@ class _AppUIPageState extends State<AppUIPage> {
                                 10,
                               ),
                               onReorder: (int oldIndex, int newIndex) {
-                                if (oldIndex < newIndex) {
-                                  newIndex--;
-                                }
+                                final int targetIndex =
+                                    oldIndex < newIndex ? newIndex - 1 : newIndex;
                                 final temp = order.removeAt(
                                   oldIndex,
                                 );
-                                order.insert(newIndex, temp);
+                                order.insert(targetIndex, temp);
                                 setStt(
                                   () {},
                                 );

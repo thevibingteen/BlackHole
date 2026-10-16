@@ -1029,10 +1029,8 @@ class NowPlayingStream extends StatelessWidget {
             height: head ? headHeight : 0,
           ),
           onReorder: (int oldIndex, int newIndex) {
-            if (oldIndex < newIndex) {
-              newIndex--;
-            }
-            audioHandler.moveQueueItem(oldIndex, newIndex);
+            final int targetIndex = oldIndex < newIndex ? newIndex - 1 : newIndex;
+            audioHandler.moveQueueItem(oldIndex, targetIndex);
           },
           scrollController: scrollController,
           physics: const BouncingScrollPhysics(),

@@ -354,10 +354,8 @@ class _OthersPageState extends State<OthersPage> {
                       .toString(),
                   keyboardType: TextInputType.number,
                   onSubmitted: (String value) {
-                    if (value.trim() == '') {
-                      value = '0';
-                    }
-                    Hive.box('settings').put('minDuration', int.parse(value));
+                    final String finalVal = value.trim().isEmpty ? '0' : value;
+                    Hive.box('settings').put('minDuration', int.parse(finalVal));
                     Navigator.pop(context);
                   },
                 );

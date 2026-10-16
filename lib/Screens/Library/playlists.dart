@@ -92,16 +92,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           keyboardType: TextInputType.name,
                           onSubmitted: (String value) async {
                             final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
-                            value.replaceAll(avoid, '').replaceAll('  ', ' ');
-                            if (value.trim() == '') {
-                              value = 'Playlist ${playlistNames.length}';
+                            String name = value.replaceAll(avoid, '').replaceAll('  ', ' ');
+                            if (name.trim() == '') {
+                              name = 'Playlist ${playlistNames.length}';
                             }
-                            while (playlistNames.contains(value) ||
-                                await Hive.boxExists(value)) {
+                            while (playlistNames.contains(name) ||
+                                await Hive.boxExists(name)) {
                               // ignore: use_string_buffers
-                              value = '$value (1)';
+                              name = '$name (1)';
                             }
-                            playlistNames.add(value);
+                            playlistNames.add(name);
                             settingsBox.put('playlistNames', playlistNames);
                             Navigator.pop(context);
                           },

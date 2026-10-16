@@ -158,9 +158,21 @@ Future<void> connectToSpotify(
   final String? accessToken = await retriveAccessToken();
 
   if (accessToken == null) {
+    if (SpotifyApi().clientID.isEmpty) {
+      Logger.root.info('Spotify client ID not configured, skipping authorization launch');
+      ShowSnackBar().showSnackBar(
+        context,
+        'Spotify integration requires a configured Client ID',
+      );
+      return;
+    }
+    final verifier = SpotifyApi.generateCodeVerifier();
+    final challenge = SpotifyApi.generateCodeChallenge(verifier);
+    settingsBox.put('spotifyCodeVerifier', verifier);
+
     launchUrl(
       Uri.parse(
-        SpotifyApi().requestAuthorization(),
+        SpotifyApi().requestAuthorization(codeChallenge: challenge),
       ),
       mode: LaunchMode.externalApplication,
     );
@@ -169,11 +181,17 @@ Future<void> connectToSpotify(
       (uri) async {
         final link = uri.toString();
         if (link.contains('code=')) {
-          final code = link.split('code=')[1];
+          final uriParsed = Uri.parse(link);
+          final code = uriParsed.queryParameters['code'] ??
+              link.split('code=')[1].split('&')[0];
           settingsBox.put('spotifyAppCode', code);
+          final String? storedVerifier =
+              settingsBox.get('spotifyCodeVerifier')?.toString();
           final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
-          final List<String> data =
-              await SpotifyApi().getAccessToken(code: code);
+          final List<String> data = await SpotifyApi().getAccessToken(
+            code: code,
+            codeVerifier: storedVerifier,
+          );
           if (data.isNotEmpty) {
             settingsBox.put('spotifyAccessToken', data[0]);
             settingsBox.put('spotifyRefreshToken', data[1]);

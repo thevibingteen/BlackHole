@@ -1375,13 +1375,14 @@ class _SettingPageState extends State<SettingPage>
                                           ),
                                           onReorder:
                                               (int oldIndex, int newIndex) {
-                                            if (oldIndex < newIndex) {
-                                              newIndex--;
-                                            }
+                                            final int targetIndex =
+                                                oldIndex < newIndex
+                                                    ? newIndex - 1
+                                                    : newIndex;
                                             final temp = order.removeAt(
                                               oldIndex,
                                             );
-                                            order.insert(newIndex, temp);
+                                            order.insert(targetIndex, temp);
                                             setStt(
                                               () {},
                                             );
@@ -3068,11 +3069,10 @@ class _SettingPageState extends State<SettingPage>
                                   .toString(),
                               keyboardType: TextInputType.number,
                               onSubmitted: (String value) {
-                                if (value.trim() == '') {
-                                  value = '0';
-                                }
+                                final String finalVal =
+                                    value.trim().isEmpty ? '0' : value;
                                 Hive.box('settings')
-                                    .put('minDuration', int.parse(value));
+                                    .put('minDuration', int.parse(finalVal));
                                 Navigator.pop(context);
                               },
                             );

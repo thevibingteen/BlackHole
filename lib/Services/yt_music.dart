@@ -285,7 +285,7 @@ class YtMusicService {
       final List<Map> searchResults = [];
 
       for (final sectionItem in finalResults) {
-        if (sectionItem.containsKey('musicCardShelfRenderer')) {
+        if (sectionItem is Map && sectionItem.containsKey('musicCardShelfRenderer')) {
           final card = sectionItem['musicCardShelfRenderer'];
           final title = nav(card, ['title', 'runs', 0, 'text'])?.toString() ?? '';
           final subtitle = (nav(card, ['subtitle', 'runs']) as List?)?.map((e) => e['text']).join('') ?? '';
@@ -306,7 +306,7 @@ class YtMusicService {
             'image': thumbnails.isNotEmpty ? thumbnails.first : '',
             'images': thumbnails,
           });
-        } else if (sectionItem.containsKey('musicShelfRenderer')) {
+        } else if (sectionItem is Map && sectionItem.containsKey('musicShelfRenderer')) {
           final shelf = sectionItem['musicShelfRenderer'];
           final shelfTitle = nav(shelf, ['title', 'runs', 0, 'text'])?.toString() ?? 'Songs';
           final shelfContents = shelf['contents'] as List? ?? [];
@@ -314,7 +314,7 @@ class YtMusicService {
           if (items.isNotEmpty) {
             groupedSections.putIfAbsent(shelfTitle, () => []).addAll(items);
           }
-        } else if (sectionItem.containsKey('itemSectionRenderer')) {
+        } else if (sectionItem is Map && sectionItem.containsKey('itemSectionRenderer')) {
           final subContents = sectionItem['itemSectionRenderer']['contents'] as List? ?? [];
           final items = _parseChildList(subContents, 'Search');
           for (final item in items) {
