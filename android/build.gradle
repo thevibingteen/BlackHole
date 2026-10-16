@@ -36,6 +36,10 @@ subprojects {
             if (namespace == null) {
                 namespace project.group
             }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
         }
         if (project.name != 'flutter_v1_embedding_shim' && project.name != 'app') {
             project.dependencies {
@@ -63,11 +67,12 @@ subprojects {
             }
         }
     }
-    project.plugins.withId("kotlin-android") {
+    project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
+        task.kotlinOptions {
+            jvmTarget = "1.8"
+        }
         if (project.name != 'flutter_v1_embedding_shim' && project.name != 'app') {
-            project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
-                task.dependsOn(':flutter_v1_embedding_shim:compileReleaseJavaWithJavac')
-            }
+            task.dependsOn(':flutter_v1_embedding_shim:compileReleaseJavaWithJavac')
         }
     }
 }
