@@ -124,7 +124,7 @@ jobs:
 
       # Build release APKs split by ABI.
       - name: Build release split-ABI APKs
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --split-per-abi --android-skip-build-dependency-validation
 
       # Determine artifact names based on whether this is a release tag or branch build
       - name: Determine artifact names
