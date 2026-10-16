@@ -1,0 +1,10 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'io.flutter.plugin.common.shim'
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 16
+    }
+}

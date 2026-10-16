@@ -11,6 +11,7 @@
 installers/node_modules/
 installers/package-lock.json
 installers/dmg_creator/*.dmg
+.local/
 
 # IntelliJ related
 *.iml
