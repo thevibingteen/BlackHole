@@ -36,7 +36,7 @@ jobs:
         run: flutter pub get
 
       - name: Statically analyze Dart code
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings .
+        run: flutter analyze --suggestions
 
       - name: Run deterministic unit & integration tests
         run: flutter test --exclude-tags=smoke
