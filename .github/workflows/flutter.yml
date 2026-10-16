@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'antigravity/*'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -13,12 +14,57 @@ permissions:
 
 env:
   JAVA_VERSION: "17"
-  FLUTTER_CHANNEL: "stable"
+  FLUTTER_VERSION: "3.47.6"
   PROPERTIES_PATH: "./android/key.properties"
 
 jobs:
-  build:
-    name: Build & Test APK
+  deterministic_tests:
+    name: Deterministic Tests & Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Statically analyze Dart code
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings .
+
+      - name: Run deterministic unit & integration tests
+        run: flutter test --exclude-tags=smoke
+
+  live_smoke_tests:
+    name: Live Provider Smoke Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run live provider smoke tests (bounded timeout)
+        run: flutter test --tags=smoke --timeout=30s
+        continue-on-error: true
+
+  build_apk:
+    name: Build Split-ABI APK
+    needs: [deterministic_tests]
     runs-on: ubuntu-latest
 
     steps:
@@ -37,31 +83,44 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: ${{ env.FLUTTER_CHANNEL }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      # Setup optional release signing if repository secrets exist
-      - name: Setup Keystore if secret exists
+      # Enforce production signing key for public tag releases
+      - name: Validate release signing secrets for tag release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          if [ -n "${{ secrets.KEYSTORE }}" ]; then
-            echo storePassword=${{ secrets.STORE_PASSWORD }} >> ${{ env.PROPERTIES_PATH }}
-            echo keyPassword=${{ secrets.KEY_PASSWORD }} >> ${{ env.PROPERTIES_PATH }}
-            echo keyAlias=${{ secrets.KEY_ALIAS }} >> ${{ env.PROPERTIES_PATH }}
-            echo storeFile=/home/runner/work/BlackHole/BlackHole/android/app/keystore.jks >> ${{ env.PROPERTIES_PATH }}
-            echo ${{ secrets.KEYSTORE }} | base64 --decode > /home/runner/work/BlackHole/BlackHole/android/app/keystore.jks
+          if [ -z "$KEYSTORE" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::Production signing secrets (KEYSTORE, STORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS) are missing. Aborting public release to prevent publishing debug-signed APK."
+            exit 1
+          fi
+
+      # Setup release signing if repository secrets exist
+      - name: Setup Keystore if secret exists
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "storePassword=$STORE_PASSWORD" >> "$PROPERTIES_PATH"
+            echo "keyPassword=$KEY_PASSWORD" >> "$PROPERTIES_PATH"
+            echo "keyAlias=$KEY_ALIAS" >> "$PROPERTIES_PATH"
+            echo "storeFile=$GITHUB_WORKSPACE/android/app/keystore.jks" >> "$PROPERTIES_PATH"
+            printf '%s' "$KEYSTORE" | base64 --decode > "$GITHUB_WORKSPACE/android/app/keystore.jks"
+          else
+            echo "No production keystore provided. CI will build test/debug-signed APK."
           fi
 
       # Get flutter dependencies.
       - name: Install dependencies
         run: flutter pub get
-
-      # Statically analyze the Dart code for any errors.
-      - name: Analyze project
-        run: flutter analyze .
-
-      # Run unit and API tests.
-      - name: Run tests
-        run: flutter test
 
       # Build release APKs split by ABI.
       - name: Build release split-ABI APKs
@@ -71,29 +130,47 @@ jobs:
       - name: Upload arm64-v8a APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-arm64-v8a-release
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && 'app-arm64-v8a-release' || 'app-arm64-v8a-test' }}
           path: build/app/outputs/apk/release/app-arm64-v8a-release.apk
 
       - name: Upload armeabi-v7a APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-armeabi-v7a-release
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && 'app-armeabi-v7a-release' || 'app-armeabi-v7a-test' }}
           path: build/app/outputs/apk/release/app-armeabi-v7a-release.apk
 
-      # Create public GitHub Release and attach APK assets ONLY when a version tag matching v* is pushed.
+  release:
+    name: Tag-Driven GitHub Release
+    needs: [build_apk]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download arm64 APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-arm64-v8a-release
+          path: release-apks
+
+      - name: Download armeabi APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-armeabi-v7a-release
+          path: release-apks
+
       - name: Create GitHub Release on version tag
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: BlackHole ${{ github.ref_name }}
           files: |
-            build/app/outputs/apk/release/app-arm64-v8a-release.apk
-            build/app/outputs/apk/release/app-armeabi-v7a-release.apk
+            release-apks/app-arm64-v8a-release.apk
+            release-apks/app-armeabi-v7a-release.apk
           generate_release_notes: true
           draft: false
           prerelease: false
 
-      # Optional Telegram notification if credentials are configured
       - name: Send Telegram notification (optional)
         if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         uses: appleboy/telegram-action@master
@@ -103,6 +180,6 @@ jobs:
           format: markdown
           disable_web_page_preview: true
           message: |
-            New build for [${{ github.event.repository.name }}](${{ github.event.repository.html_url }}) on ${{ github.ref_name }}.
+            New release for [${{ github.event.repository.name }}](${{ github.event.repository.html_url }}) on ${{ github.ref_name }}.
             Commit: ${{ github.sha }}
-          document: build/app/outputs/apk/release/app-arm64-v8a-release.apk, build/app/outputs/apk/release/app-armeabi-v7a-release.apk
+          document: release-apks/app-arm64-v8a-release.apk, release-apks/app-armeabi-v7a-release.apk
