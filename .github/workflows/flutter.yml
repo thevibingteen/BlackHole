@@ -126,17 +126,29 @@ jobs:
       - name: Build release split-ABI APKs
         run: flutter build apk --release --split-per-abi
 
+      # Determine artifact names based on whether this is a release tag or branch build
+      - name: Determine artifact names
+        id: artifact_names
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "arm64_name=app-arm64-v8a-release" >> "$GITHUB_OUTPUT"
+            echo "armeabi_name=app-armeabi-v7a-release" >> "$GITHUB_OUTPUT"
+          else
+            echo "arm64_name=app-arm64-v8a-test" >> "$GITHUB_OUTPUT"
+            echo "armeabi_name=app-armeabi-v7a-test" >> "$GITHUB_OUTPUT"
+          fi
+
       # Upload generated apks as GitHub Actions artifacts for every build.
       - name: Upload arm64-v8a APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && 'app-arm64-v8a-release' || 'app-arm64-v8a-test' }}
+          name: ${{ steps.artifact_names.outputs.arm64_name }}
           path: build/app/outputs/apk/release/app-arm64-v8a-release.apk
 
       - name: Upload armeabi-v7a APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && 'app-armeabi-v7a-release' || 'app-armeabi-v7a-test' }}
+          name: ${{ steps.artifact_names.outputs.armeabi_name }}
           path: build/app/outputs/apk/release/app-armeabi-v7a-release.apk
 
   release:
@@ -146,6 +158,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
     steps:
       - name: Download arm64 APK
@@ -172,7 +187,7 @@ jobs:
           prerelease: false
 
       - name: Send Telegram notification (optional)
-        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
