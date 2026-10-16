@@ -1,3 +1,14 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.1.1'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0'
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -8,9 +19,23 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+    buildscript {
+        configurations.classpath {
+            resolutionStrategy {
+                force 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0'
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(':app')
+    project.plugins.withId("com.android.library") {
+        project.android {
+            if (namespace == null) {
+                namespace project.group
+            }
+        }
+    }
 }
 
 tasks.register("clean", Delete) {
