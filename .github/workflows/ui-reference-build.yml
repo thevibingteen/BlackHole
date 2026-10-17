@@ -78,6 +78,25 @@ jobs:
           EOF
           echo "Disposable keystore and key.properties generated."
 
+      - name: Apply temporary CI-only audiotagger dependency replacement
+        run: |
+          python3 -c "
+          with open('source/pubspec.yaml', 'r') as f:
+              content = f.read()
+          target = '''  audiotagger:
+    git:
+      url: https://github.com/Sangwan5688/Audiotagger
+      ref: 90f2db5'''
+          replacement = '''  audiotagger: 2.2.1'''
+          if target not in content:
+              raise ValueError('Target audiotagger block not found in source/pubspec.yaml')
+          content = content.replace(target, replacement)
+          with open('source/pubspec.yaml', 'w') as f:
+              f.write(content)
+          print('Successfully replaced audiotagger git dependency with audiotagger: 2.2.1')
+          "
+          grep -n "audiotagger:" source/pubspec.yaml
+
       - name: Resolve dependencies (flutter pub get)
         run: |
           cd source
