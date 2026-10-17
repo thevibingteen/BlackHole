@@ -23,9 +23,12 @@ import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 
 class GitHub {
-  static String repo = 'Sangwan5688/BlackHole';
+  static String repo = 'thevibingteen/BlackHole';
   static String baseUrl = 'api.github.com';
-  static Map<String, String> headers = {};
+  static Map<String, String> headers = {
+    'User-Agent': 'BlackHole',
+    'Accept': 'application/vnd.github.v3+json',
+  };
   static Map<String, String> endpoints = {
     'repo': '/repos',
     'releases': '/releases',
@@ -44,28 +47,44 @@ class GitHub {
       '${endpoints["repo"]}/$repo${endpoints["releases"]}',
     );
 
-    return get(url, headers: headers).onError((error, stackTrace) {
+    try {
+      return await get(url, headers: headers)
+          .timeout(const Duration(seconds: 10))
+          .onError((error, stackTrace) {
+        return Response(
+          jsonEncode({
+            'status': false,
+            'message': error.toString(),
+          }),
+          404,
+        );
+      });
+    } catch (e) {
       return Response(
-        {
+        jsonEncode({
           'status': false,
-          'message': error.toString(),
-        }.toString(),
+          'message': e.toString(),
+        }),
         404,
       );
-    });
+    }
   }
 
   static Future<Map> fetchReleases() async {
     final res = await getResponse();
     if (res.statusCode == 200) {
-      final resp = json.decode(res.body);
-      if (resp is List) {
-        return resp[0] as Map;
-      } else if (resp is Map) {
-        Logger.root.severe('Failed to fetch releases', resp['message']);
+      try {
+        final resp = json.decode(res.body);
+        if (resp is List && resp.isNotEmpty) {
+          return resp[0] as Map;
+        } else if (resp is Map) {
+          Logger.root.severe('Failed to fetch releases', resp['message']);
+        }
+      } catch (e) {
+        Logger.root.severe('Failed to parse releases response: $e');
       }
     } else {
-      Logger.root.severe('Failed to fetch releases', res.body);
+      Logger.root.warning('Failed to fetch releases, status: ${res.statusCode}');
     }
     return {};
   }

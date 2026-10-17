@@ -29,11 +29,32 @@ import 'package:logging/logging.dart';
 
 // ignore: avoid_classes_with_only_static_members
 class Lyrics {
+  static bool isHtmlOrChallenge(String text) {
+    if (text.isEmpty) return false;
+    final lower = text.toLowerCase();
+    if (lower.contains('<!doctype') ||
+        lower.contains('<html') ||
+        lower.contains('<head') ||
+        lower.contains('<body') ||
+        lower.contains('<script') ||
+        lower.contains('<style') ||
+        lower.contains('captcha') ||
+        lower.contains('enable javascript') ||
+        lower.contains('challenge-platform') ||
+        lower.contains('cloudflare') ||
+        (lower.contains('<div') && lower.contains('</div>'))) {
+      return true;
+    }
+    return false;
+  }
+
   static Future<Map<String, String>> getLyrics({
     required String id,
     required String title,
     required String artist,
     required bool saavnHas,
+    String? album,
+    int? duration,
   }) async {
     final Map<String, String> result = {
       'lyrics': '',
@@ -42,46 +63,178 @@ class Lyrics {
       'id': id,
     };
 
-    Logger.root.info('Getting Synced Lyrics');
-    final res = await getSpotifyLyrics(title, artist);
-    result['lyrics'] = res['lyrics']!;
-    result['type'] = res['type']!;
-    result['source'] = res['source']!;
-    if (result['lyrics'] == '') {
-      Logger.root.info('Synced Lyrics, not found. Getting text lyrics');
-      if (saavnHas) {
+    // 1. Try LRCLIB structured API first (preferred source for synced and plain lyrics)
+    try {
+      Logger.root.info('Getting lyrics from LRCLIB for $title - $artist');
+      final lrclibRes = await getLrclibLyrics(
+        trackName: title,
+        artistName: artist,
+        albumName: album,
+        duration: duration,
+      );
+      if (lrclibRes['lyrics']!.isNotEmpty &&
+          !isHtmlOrChallenge(lrclibRes['lyrics']!)) {
+        result['lyrics'] = lrclibRes['lyrics']!;
+        result['type'] = lrclibRes['type']!;
+        result['source'] = 'LRCLIB';
+        return result;
+      }
+    } catch (e) {
+      Logger.root.warning('Error in LRCLIB lyrics lookup: $e');
+    }
+
+    // 2. Try Spotify synced lyrics (if user authenticated or available)
+    try {
+      Logger.root.info('Getting Synced Lyrics from Spotify');
+      final res = await getSpotifyLyrics(title, artist);
+      if (res['lyrics']!.isNotEmpty && !isHtmlOrChallenge(res['lyrics']!)) {
+        result['lyrics'] = res['lyrics']!;
+        result['type'] = res['type']!;
+        result['source'] = res['source']!;
+        return result;
+      }
+    } catch (e) {
+      Logger.root.warning('Error in Spotify lyrics lookup: $e');
+    }
+
+    // 3. Try Saavn lyrics if track has them
+    if (saavnHas) {
+      try {
         Logger.root.info('Getting Lyrics from Saavn');
-        result['lyrics'] = await getSaavnLyrics(id);
-        result['type'] = 'text';
-        result['source'] = 'Jiosaavn';
-        if (result['lyrics'] == '') {
-          final res = await getLyrics(
-            id: id,
-            title: title,
-            artist: artist,
-            saavnHas: false,
-          );
-          result['lyrics'] = res['lyrics']!;
-          result['type'] = res['type']!;
-          result['source'] = res['source']!;
-        }
-      } else {
-        Logger.root
-            .info('Lyrics not available on Saavn, finding on Musixmatch');
-        result['lyrics'] =
-            await getMusixMatchLyrics(title: title, artist: artist);
-        result['type'] = 'text';
-        result['source'] = 'Musixmatch';
-        if (result['lyrics'] == '') {
-          Logger.root
-              .info('Lyrics not found on Musixmatch, searching on Google');
-          result['lyrics'] =
-              await getGoogleLyrics(title: title, artist: artist);
+        final saavnLyrics = await getSaavnLyrics(id);
+        if (saavnLyrics.isNotEmpty && !isHtmlOrChallenge(saavnLyrics)) {
+          result['lyrics'] = saavnLyrics;
           result['type'] = 'text';
-          result['source'] = 'Google';
+          result['source'] = 'Jiosaavn';
+          return result;
         }
+      } catch (e) {
+        Logger.root.warning('Error in Saavn lyrics lookup: $e');
       }
     }
+
+    // 4. Try MusixMatch text lyrics
+    try {
+      Logger.root.info('Lyrics not available on Saavn/Spotify, finding on Musixmatch');
+      final mmLyrics = await getMusixMatchLyrics(title: title, artist: artist);
+      if (mmLyrics.isNotEmpty && !isHtmlOrChallenge(mmLyrics)) {
+        result['lyrics'] = mmLyrics;
+        result['type'] = 'text';
+        result['source'] = 'Musixmatch';
+        return result;
+      }
+    } catch (e) {
+      Logger.root.warning('Error in Musixmatch lyrics lookup: $e');
+    }
+
+    // Google scraper is intentionally removed from active fallback chain
+    // to prevent Google challenge/HTML responses from reaching the lyrics renderer.
+    if (isHtmlOrChallenge(result['lyrics']!)) {
+      result['lyrics'] = '';
+    }
+    return result;
+  }
+
+  static Future<Map<String, String>> getLrclibLyrics({
+    required String trackName,
+    required String artistName,
+    String? albumName,
+    int? duration,
+  }) async {
+    final Map<String, String> result = {
+      'lyrics': '',
+      'type': 'text',
+      'source': 'LRCLIB',
+    };
+
+    // Clean track name for search (remove extraneous tags like '(Official Video)', etc.)
+    final cleanTrackName = trackName
+        .split('(From')[0]
+        .split('(Official')[0]
+        .split('[Official')[0]
+        .split('|')[0]
+        .trim();
+    final cleanArtistName = artistName.split(',')[0].trim();
+
+    // 1. Exact track lookup
+    try {
+      final queryParams = <String, String>{
+        'track_name': cleanTrackName,
+        'artist_name': cleanArtistName,
+      };
+      if (albumName != null && albumName.isNotEmpty) {
+        queryParams['album_name'] = albumName;
+      }
+      if (duration != null && duration > 0) {
+        queryParams['duration'] = duration.toString();
+      }
+
+      final uri = Uri.https('lrclib.net', '/api/get', queryParams);
+      final res = await get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'BlackHole/1.0',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        if (data is Map) {
+          final synced = data['syncedLyrics']?.toString() ?? '';
+          final plain = data['plainLyrics']?.toString() ?? '';
+          if (synced.isNotEmpty && !isHtmlOrChallenge(synced)) {
+            result['lyrics'] = synced;
+            result['type'] = 'lrc';
+            return result;
+          } else if (plain.isNotEmpty && !isHtmlOrChallenge(plain)) {
+            result['lyrics'] = plain;
+            result['type'] = 'text';
+            return result;
+          }
+        }
+      }
+    } catch (e) {
+      Logger.root.warning('Exact LRCLIB lookup failed: $e');
+    }
+
+    // 2. Search fallback
+    try {
+      final searchUri = Uri.https('lrclib.net', '/api/search', {
+        'q': '$cleanTrackName $cleanArtistName',
+      });
+      final searchRes = await get(
+        searchUri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'BlackHole/1.0',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (searchRes.statusCode == 200) {
+        final list = json.decode(searchRes.body);
+        if (list is List && list.isNotEmpty) {
+          for (final item in list) {
+            if (item is Map) {
+              final synced = item['syncedLyrics']?.toString() ?? '';
+              final plain = item['plainLyrics']?.toString() ?? '';
+              if (synced.isNotEmpty && !isHtmlOrChallenge(synced)) {
+                result['lyrics'] = synced;
+                result['type'] = 'lrc';
+                return result;
+              } else if (plain.isNotEmpty && !isHtmlOrChallenge(plain)) {
+                result['lyrics'] = plain;
+                result['type'] = 'text';
+                return result;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      Logger.root.warning('Search LRCLIB lookup failed: $e');
+    }
+
     return result;
   }
 
@@ -91,9 +244,12 @@ class Lyrics {
         'www.jiosaavn.com',
         '/api.php?__call=lyrics.getLyrics&lyrics_id=$id&ctx=web6dot0&api_version=4&_format=json',
       );
-      final Response res =
-          await get(lyricsUrl, headers: {'Accept': 'application/json'});
+      final Response res = await get(
+        lyricsUrl,
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
 
+      if (res.statusCode != 200) return '';
       final List<String> rawLyrics = res.body.split('-->');
       Map fetchedLyrics = {};
       if (rawLyrics.length > 1) {
@@ -103,6 +259,7 @@ class Lyrics {
       }
       final String lyrics =
           fetchedLyrics['lyrics'].toString().replaceAll('<br>', '\n');
+      if (isHtmlOrChallenge(lyrics)) return '';
       return lyrics;
     } catch (e) {
       Logger.root.severe('Error in getSaavnLyrics', e);
@@ -127,8 +284,8 @@ class Lyrics {
           limit: 1,
         );
         try {
-          // Logger.root.info(jsonEncode(value['tracks']['items'][0]));
-          if (value['tracks']['items'].length == 0) {
+          if (value['tracks']?['items'] == null ||
+              (value['tracks']['items'] as List).isEmpty) {
             Logger.root.info('No song found');
             return result;
           }
@@ -165,6 +322,9 @@ class Lyrics {
       },
       forceSign: false,
     );
+    if (isHtmlOrChallenge(result['lyrics']!)) {
+      result['lyrics'] = '';
+    }
     return result;
   }
 
@@ -181,13 +341,15 @@ class Lyrics {
         'trackid': trackId,
         'format': 'lrc',
       });
-      final Response res =
-          await get(lyricsUrl, headers: {'Accept': 'application/json'});
+      final Response res = await get(
+        lyricsUrl,
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
-        final Map lyricsData = await json.decode(res.body) as Map;
+        final Map lyricsData = json.decode(res.body) as Map;
         if (lyricsData['error'] == false) {
-          final List lines = await lyricsData['lines'] as List;
+          final List lines = lyricsData['lines'] as List;
           if (lyricsData['syncType'] == 'LINE_SYNCED') {
             result['lyrics'] = lines
                 .map((e) => '[${e["timeTag"]}]${e["words"]}')
@@ -204,6 +366,9 @@ class Lyrics {
           'getSpotifyLyricsFromId returned ${res.statusCode}',
           res.body,
         );
+      }
+      if (isHtmlOrChallenge(result['lyrics']!)) {
+        result['lyrics'] = '';
       }
       return result;
     } catch (e) {
@@ -226,7 +391,7 @@ class Lyrics {
     try {
       lyrics = (await get(
         Uri.parse(Uri.encodeFull('$url$title by $artist lyrics')),
-      ))
+      ).timeout(const Duration(seconds: 8)))
           .body;
       lyrics = lyrics.split(delimiter1).last;
       lyrics = lyrics.split(delimiter2).first;
@@ -237,7 +402,7 @@ class Lyrics {
           Uri.parse(
             Uri.encodeFull('$url$title by $artist song lyrics'),
           ),
-        ))
+        ).timeout(const Duration(seconds: 8)))
             .body;
         lyrics = lyrics.split(delimiter1).last;
         lyrics = lyrics.split(delimiter2).first;
@@ -250,7 +415,7 @@ class Lyrics {
                 '$url${title.split("-").first} by $artist lyrics',
               ),
             ),
-          ))
+          ).timeout(const Duration(seconds: 8)))
               .body;
           lyrics = lyrics.split(delimiter1).last;
           lyrics = lyrics.split(delimiter2).first;
@@ -260,14 +425,18 @@ class Lyrics {
         }
       }
     }
-    return lyrics.trim();
+    final trimmed = lyrics.trim();
+    if (isHtmlOrChallenge(trimmed)) return '';
+    return trimmed;
   }
 
   static Future<String> getOffLyrics(String path) async {
     try {
       final Audiotagger tagger = Audiotagger();
       final Tag? tags = await tagger.readTags(path: path);
-      return tags?.lyrics ?? '';
+      final raw = tags?.lyrics ?? '';
+      if (isHtmlOrChallenge(raw)) return '';
+      return raw;
     } catch (e) {
       return '';
     }
@@ -276,7 +445,9 @@ class Lyrics {
   static Future<String> getLyricsLink(String song, String artist) async {
     const String authority = 'www.musixmatch.com';
     final String unencodedPath = '/search/$song $artist';
-    final Response res = await get(Uri.https(authority, unencodedPath));
+    final Response res = await get(
+      Uri.https(authority, unencodedPath),
+    ).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return '';
     final RegExpMatch? result =
         RegExp(r'href=\"(\/lyrics\/.*?)\"').firstMatch(res.body);
@@ -286,14 +457,18 @@ class Lyrics {
   static Future<String> scrapLink(String unencodedPath) async {
     Logger.root.info('Trying to scrap lyrics from $unencodedPath');
     const String authority = 'www.musixmatch.com';
-    final Response res = await get(Uri.https(authority, unencodedPath));
+    final Response res = await get(
+      Uri.https(authority, unencodedPath),
+    ).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return '';
     final List<String?> lyrics = RegExp(
       r'<span class=\"lyrics__content__ok\">(.*?)<\/span>',
       dotAll: true,
     ).allMatches(res.body).map((m) => m[1]).toList();
 
-    return lyrics.isEmpty ? '' : lyrics.join('\n');
+    final result = lyrics.isEmpty ? '' : lyrics.join('\n');
+    if (isHtmlOrChallenge(result)) return '';
+    return result;
   }
 
   static Future<String> getMusixMatchLyrics({
@@ -303,6 +478,7 @@ class Lyrics {
     try {
       final String link = await getLyricsLink(title, artist);
       Logger.root.info('Found Musixmatch Lyrics Link: $link');
+      if (link.isEmpty) return '';
       final String lyrics = await scrapLink(link);
       return lyrics;
     } catch (e) {

@@ -75,77 +75,98 @@ class FormatResponse {
   }
 
   static Future<Map> formatSingleSongResponse(Map response) async {
-    // Map cachedSong = Hive.box('cache').get(response['id']);
-    // if (cachedSong != null) {
-    //   return cachedSong;
-    // }
     try {
       final List artistNames = [];
-      if (response['more_info']?['artistMap'] == false ||
-          response['more_info']?['artistMap']?['primary_artists'] == null ||
-          response['more_info']?['artistMap']?['primary_artists'].length == 0) {
-        if (response['more_info']?['artistMap'] == false ||
-            response['more_info']?['artistMap']?['featured_artists'] == null ||
-            response['more_info']?['artistMap']?['featured_artists']?.length ==
-                0) {
-          if (response['more_info']?['artistMap'] == false ||
-              response['more_info']?['artistMap']?['artists'] == null ||
-              response['more_info']?['artistMap']?['artists']?.length == 0) {
-            if (response['more_info']?['music'] != null) {
-              artistNames.add(response['more_info']['music']);
-            } else {
-              artistNames.add('Unknown');
-            }
-          } else {
-            try {
-              response['more_info']['artistMap']['artists'][0]['id']
-                  .forEach((element) {
-                artistNames.add(element['name']);
-              });
-            } catch (e) {
-              response['more_info']['artistMap']['artists'].forEach((element) {
-                artistNames.add(element['name']);
-              });
-            }
+      final moreInfo = (response['more_info'] as Map?) ?? {};
+      final artistMap = (moreInfo['artistMap'] as Map?) ?? {};
+      final primaryArtists = (artistMap['primary_artists'] as List?) ?? [];
+      final featuredArtists = (artistMap['featured_artists'] as List?) ?? [];
+      final artists = (artistMap['artists'] as List?) ?? [];
+
+      if (primaryArtists.isNotEmpty) {
+        for (final el in primaryArtists) {
+          if (el is Map && el['name'] != null) {
+            artistNames.add(el['name'].toString());
           }
-        } else {
-          response['more_info']['artistMap']['featured_artists']
-              .forEach((element) {
-            artistNames.add(element['name']);
-          });
         }
+      } else if (featuredArtists.isNotEmpty) {
+        for (final el in featuredArtists) {
+          if (el is Map && el['name'] != null) {
+            artistNames.add(el['name'].toString());
+          }
+        }
+      } else if (artists.isNotEmpty) {
+        for (final el in artists) {
+          if (el is Map && el['name'] != null) {
+            artistNames.add(el['name'].toString());
+          }
+        }
+      } else if (moreInfo['music'] != null) {
+        artistNames.add(moreInfo['music'].toString());
+      } else if (response['singers'] != null &&
+          response['singers'].toString().trim().isNotEmpty) {
+        artistNames.add(response['singers'].toString());
+      } else if (moreInfo['singers'] != null &&
+          moreInfo['singers'].toString().trim().isNotEmpty) {
+        artistNames.add(moreInfo['singers'].toString());
+      } else if (response['subtitle'] != null &&
+          response['subtitle'].toString().trim().isNotEmpty) {
+        artistNames.add(response['subtitle'].toString());
       } else {
-        response['more_info']['artistMap']['primary_artists']
-            .forEach((element) {
-          artistNames.add(element['name']);
-        });
+        artistNames.add('Unknown');
+      }
+
+      final String encUrl = moreInfo['encrypted_media_url']?.toString() ??
+          response['encrypted_media_url']?.toString() ??
+          '';
+      String decodedUrl = encUrl.isNotEmpty ? decode(encUrl) : '';
+      if (decodedUrl.isEmpty) {
+        decodedUrl = (moreInfo['media_preview_url'] ??
+                response['media_preview_url'] ??
+                moreInfo['media_url'] ??
+                response['media_url'] ??
+                response['url'] ??
+                '')
+            .toString();
       }
 
       return {
-        'id': response['id'],
-        'type': response['type'],
-        'album': response['more_info']['album'].toString().unescape(),
-        'year': response['year'],
-        'duration': response['more_info']['duration'],
-        'language': response['language'].toString().capitalize(),
-        'genre': response['language'].toString().capitalize(),
-        '320kbps': response['more_info']['320kbps'],
-        'has_lyrics': response['more_info']['has_lyrics'],
+        'id': response['id']?.toString() ?? '',
+        'type': response['type']?.toString() ?? 'song',
+        'album': moreInfo['album']?.toString().unescape() ?? '',
+        'year': (response['year'] ?? moreInfo['year'] ?? '').toString(),
+        'duration': (moreInfo['duration'] ?? '0').toString(),
+        'language': (response['language'] ??
+                moreInfo['editorial_language'] ??
+                '')
+            .toString()
+            .capitalize(),
+        'genre': (response['language'] ??
+                moreInfo['editorial_language'] ??
+                '')
+            .toString()
+            .capitalize(),
+        '320kbps': (moreInfo['320kbps'] == 'true' ||
+            moreInfo['320kbps'] == true ||
+            response['320kbps'] == 'true' ||
+            response['320kbps'] == true),
+        'has_lyrics': (moreInfo['has_lyrics'] == 'true' ||
+            moreInfo['has_lyrics'] == true ||
+            response['has_lyrics'] == 'true' ||
+            response['has_lyrics'] == true),
         'lyrics_snippet':
-            response['more_info']['lyrics_snippet'].toString().unescape(),
-        'release_date': response['more_info']['release_date'],
-        'album_id': response['more_info']['album_id'],
-        'subtitle': response['subtitle'].toString().unescape(),
-        'title': response['title'].toString().unescape(),
+            moreInfo['lyrics_snippet']?.toString().unescape() ?? '',
+        'release_date': (moreInfo['release_date'] ?? '').toString(),
+        'album_id': (moreInfo['album_id'] ?? '').toString(),
+        'subtitle': response['subtitle']?.toString().unescape() ?? '',
+        'title':
+            (response['title'] ?? response['song'] ?? '').toString().unescape(),
         'artist': artistNames.join(', ').unescape(),
-        'album_artist': response['more_info'] == null
-            ? response['music']
-            : response['more_info']['music'],
-        'image': getImageUrl(response['image'].toString()),
-        'perma_url': response['perma_url'],
-        'url': decode(response['more_info']['encrypted_media_url'].toString()),
+        'album_artist': moreInfo['music'] ?? response['music'] ?? '',
+        'image': getImageUrl(response['image']?.toString() ?? ''),
+        'perma_url': (response['perma_url'] ?? '').toString(),
+        'url': decodedUrl,
       };
-      // Hive.box('cache').put(response['id'].toString(), info);
     } catch (e) {
       Logger.root.severe('Error inside FormatSingleSongResponse: $e');
       return {'Error': e};
@@ -488,34 +509,48 @@ class FormatResponse {
     }
   }
 
-  static Future<Map> formatHomePageData(Map data) async {
+  static Future<Map> formatHomePageData(Map inputData) async {
+    final Map data = Map<dynamic, dynamic>.from(inputData);
     try {
-      if (data['new_trending'] != null) {
+      if (data['new_trending'] != null && data['new_trending'] is List) {
         data['new_trending'] =
             await formatSongsInList(data['new_trending'] as List);
       }
-      if (data['new_albums'] != null) {
+      if (data['new_albums'] != null && data['new_albums'] is List) {
         data['new_albums'] =
             await formatSongsInList(data['new_albums'] as List);
       }
-      if (data['city_mod'] != null) {
+      if (data['city_mod'] != null && data['city_mod'] is List) {
         data['city_mod'] = await formatSongsInList(data['city_mod'] as List);
       }
       final List promoList = [];
       final List promoListTemp = [];
-      data['modules'].forEach((k, v) {
-        if (k.startsWith('promo') as bool) {
-          if (data[k][0]['type'] == 'song' &&
-              (data[k][0]['mini_obj'] as bool? ?? false)) {
-            promoListTemp.add(k.toString());
-          } else {
-            promoList.add(k.toString());
+      if (data['modules'] != null && data['modules'] is Map) {
+        (data['modules'] as Map).forEach((k, v) {
+          if (k.toString().startsWith('promo')) {
+            final modData = data[k];
+            if (modData is List && modData.isNotEmpty) {
+              final firstItem = modData[0];
+              if (firstItem is Map &&
+                  firstItem['type'] == 'song' &&
+                  (firstItem['mini_obj'] as bool? ?? false)) {
+                if (firstItem['more_info']?['encrypted_media_url'] != null) {
+                  promoList.add(k.toString());
+                } else {
+                  promoListTemp.add(k.toString());
+                }
+              } else {
+                promoList.add(k.toString());
+              }
+            }
           }
-        }
-      });
+        });
+      }
       for (int i = 0; i < promoList.length; i++) {
-        data[promoList[i]] =
-            await formatSongsInList(data[promoList[i]] as List);
+        if (data[promoList[i]] is List) {
+          data[promoList[i]] =
+              await formatSongsInList(data[promoList[i]] as List);
+        }
       }
       data['collections'] = [
         'new_trending',
@@ -531,18 +566,33 @@ class FormatResponse {
       data['collections_temp'] = promoListTemp;
     } catch (e) {
       Logger.root.severe('Error inside formatHomePageData: $e');
+      data['collections'] ??= [
+        'new_trending',
+        'charts',
+        'new_albums',
+        'tag_mixes',
+        'top_playlists',
+        'radio',
+        'city_mod',
+        'artist_recos',
+      ];
+      data['collections_temp'] ??= [];
     }
     return data;
   }
 
   static Future<Map> formatPromoLists(Map data) async {
     try {
-      final List promoList = data['collections_temp'] as List;
+      final List promoList = (data['collections_temp'] as List?) ?? [];
       for (int i = 0; i < promoList.length; i++) {
-        data[promoList[i]] =
-            await formatSongsInList(data[promoList[i]] as List);
+        if (data[promoList[i]] is List) {
+          data[promoList[i]] =
+              await formatSongsInList(data[promoList[i]] as List);
+        }
       }
-      data['collections'].addAll(promoList);
+      if (data['collections'] is List) {
+        (data['collections'] as List).addAll(promoList);
+      }
       data['collections_temp'] = [];
     } catch (e) {
       Logger.root.severe('Error inside formatPromoLists: $e');
@@ -553,25 +603,41 @@ class FormatResponse {
   static Future<List> formatSongsInList(List list) async {
     if (list.isNotEmpty) {
       for (int i = 0; i < list.length; i++) {
-        final Map item = list[i] as Map;
-        if (item['type'] == 'song') {
+        final item = list[i];
+        if (item is Map && item['type'] == 'song') {
+          if (item['more_info']?['encrypted_media_url'] != null) {
+            final formatted = await formatSingleSongResponse(item);
+            if (!formatted.containsKey('Error')) {
+              list[i] = formatted;
+              continue;
+            }
+          }
           if (item['mini_obj'] as bool? ?? false) {
             Map cachedDetails = Hive.box('cache')
                 .get(item['id'].toString(), defaultValue: {}) as Map;
             if (cachedDetails.isEmpty) {
               cachedDetails =
                   await SaavnAPI().fetchSongDetails(item['id'].toString());
-              Hive.box('cache')
-                  .put(cachedDetails['id'].toString(), cachedDetails);
+              if (cachedDetails.isNotEmpty && cachedDetails['id'] != null) {
+                Hive.box('cache')
+                    .put(cachedDetails['id'].toString(), cachedDetails);
+              }
             }
-            list[i] = cachedDetails;
+            if (cachedDetails.isNotEmpty) {
+              list[i] = cachedDetails;
+            }
             continue;
           }
-          list[i] = await formatSingleSongResponse(item);
+          final formatted = await formatSingleSongResponse(item);
+          if (!formatted.containsKey('Error')) {
+            list[i] = formatted;
+          }
         }
       }
     }
-    list.removeWhere((value) => value == null);
+    list.removeWhere(
+      (value) => value == null || (value is Map && value.isEmpty),
+    );
     return list;
   }
 }

@@ -77,7 +77,6 @@ class YtMusicService {
       'accept': '*/*',
       'accept-encoding': 'gzip, deflate',
       'content-type': 'application/json',
-      'content-encoding': 'gzip',
       'origin': httpsYtmDomain,
       'cookie': 'CONSENT=YES+1'
     };
@@ -88,8 +87,14 @@ class YtMusicService {
     Map<String, String>? headers,
   ) async {
     final Uri uri = Uri.https(url);
-    final Response response = await get(uri, headers: headers);
-    return response;
+    try {
+      final Response response =
+          await get(uri, headers: headers).timeout(const Duration(seconds: 15));
+      return response;
+    } catch (e) {
+      Logger.root.severe('Error in sendGetRequest for $url: $e');
+      return Response('{}', 500);
+    }
   }
 
   Future<String?> getVisitorId(Map<String, String>? headers) async {
@@ -124,13 +129,22 @@ class YtMusicService {
     Map<String, String>? headers,
   ) async {
     final Uri uri = Uri.https(ytmDomain, baseApiEndpoint + endpoint, ytmParams);
-    final response = await post(uri, headers: headers, body: jsonEncode(body));
-    if (response.statusCode == 200) {
-      return json.decode(response.body) as Map;
-    } else {
-      Logger.root
-          .severe('YtMusic returned ${response.statusCode}', response.body);
-      Logger.root.info('Requested endpoint: $uri');
+    try {
+      final response = await post(
+        uri,
+        headers: headers,
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map;
+      } else {
+        Logger.root
+            .severe('YtMusic returned ${response.statusCode}', response.body);
+        Logger.root.info('Requested endpoint: $uri');
+        return {};
+      }
+    } catch (e) {
+      Logger.root.severe('Error in sendRequest for $endpoint: $e');
       return {};
     }
   }
@@ -228,6 +242,189 @@ class YtMusicService {
     context!['context']['client']['hl'] = 'en';
   }
 
+  Map? parseResponsiveListItem(
+    Map childItem, {
+    String defaultSectionTitle = '',
+  }) =>
+      _parseResponsiveListItem(
+        childItem,
+        defaultSectionTitle: defaultSectionTitle,
+      );
+
+  Map? _parseResponsiveListItem(
+    Map childItem, {
+    String defaultSectionTitle = '',
+  }) {
+    final renderer = childItem['musicResponsiveListItemRenderer'] as Map?;
+    if (renderer == null) return null;
+
+    final List images = (nav(childItem, [
+          'musicResponsiveListItemRenderer',
+          'thumbnail',
+          'musicThumbnailRenderer',
+          'thumbnail',
+          'thumbnails'
+        ]) as List? ??
+        [])
+        .map((e) => (e as Map)['url'])
+        .toList();
+
+    final String title = nav(childItem, [
+          'musicResponsiveListItemRenderer',
+          'flexColumns',
+          0,
+          'musicResponsiveListItemFlexColumnRenderer',
+          'text',
+          'runs',
+          0,
+          'text'
+        ])?.toString() ??
+        '';
+
+    if (title.isEmpty) return null;
+
+    final List subtitleList = (nav(childItem, [
+          'musicResponsiveListItemRenderer',
+          'flexColumns',
+          1,
+          'musicResponsiveListItemFlexColumnRenderer',
+          'text',
+          'runs'
+        ]) as List?) ??
+        [];
+
+    int count = 0;
+    String type = '';
+    String album = '';
+    String artist = '';
+    String views = '';
+    String duration = '';
+    String subtitle = '';
+    String year = '';
+    String countSongs = '';
+    String subscribers = '';
+
+    for (final element in subtitleList) {
+      if (element is! Map) continue;
+      final String text = element['text']?.toString() ?? '';
+      subtitle += text;
+      if (text.trim() == '•') {
+        count++;
+      } else {
+        if (count == 0) {
+          type += text;
+        } else if (count == 1) {
+          if (defaultSectionTitle == 'Artists' || type == 'Artist') {
+            subscribers += text;
+          } else {
+            if (text.trim() == '&') {
+              artist += ', ';
+            } else {
+              artist += text;
+            }
+          }
+        } else if (count == 2) {
+          if (defaultSectionTitle == 'Songs' ||
+              type == 'Song' ||
+              type == 'Single') {
+            album += text;
+          } else if (defaultSectionTitle == 'Videos' || type == 'Video') {
+            views += text;
+          } else if (defaultSectionTitle == 'Albums' || type == 'Album') {
+            year += text;
+          } else if (defaultSectionTitle.toLowerCase().contains('playlist') ||
+              type.toLowerCase().contains('playlist')) {
+            countSongs += text;
+          } else {
+            album += text;
+          }
+        } else if (count == 3) {
+          duration += text;
+        }
+      }
+    }
+
+    if (type.isEmpty) {
+      if (defaultSectionTitle == 'Songs') {
+        type = 'Song';
+      } else if (defaultSectionTitle == 'Videos') {
+        type = 'Video';
+      } else if (defaultSectionTitle == 'Artists') {
+        type = 'Artist';
+      } else if (defaultSectionTitle == 'Albums') {
+        type = 'Album';
+      } else if (defaultSectionTitle.toLowerCase().contains('playlist')) {
+        type = 'Playlist';
+      } else {
+        type = 'Song';
+      }
+    }
+
+    // Extract ID safely from videoId or browseEndpoint
+    String? videoId;
+    videoId = renderer['playlistItemData']?['videoId']?.toString();
+    videoId ??= renderer['overlay']?['musicItemThumbnailOverlayRenderer']
+            ?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']
+            ?['watchEndpoint']?['videoId']
+        ?.toString();
+    videoId ??= renderer['navigationEndpoint']?['watchEndpoint']?['videoId']
+        ?.toString();
+    videoId ??=
+        renderer['doubleTapCommand']?['watchEndpoint']?['videoId']?.toString();
+    videoId ??= nav(childItem, [
+      'musicResponsiveListItemRenderer',
+      'flexColumns',
+      0,
+      'musicResponsiveListItemFlexColumnRenderer',
+      'text',
+      'runs',
+      0,
+      'navigationEndpoint',
+      'watchEndpoint',
+      'videoId'
+    ])?.toString();
+
+    final String? browseId = renderer['navigationEndpoint']?['browseEndpoint']
+            ?['browseId']
+        ?.toString();
+
+    final String lowerType = type.toLowerCase();
+    String? id;
+    if (lowerType == 'artist' ||
+        lowerType == 'profile' ||
+        lowerType == 'album' ||
+        lowerType == 'playlist' ||
+        lowerType == 'single') {
+      id = browseId ?? videoId;
+      if (lowerType == 'profile') type = 'Artist';
+    } else {
+      id = videoId ?? browseId;
+      if (videoId != null && type != 'Video') {
+        type = 'Song';
+      }
+    }
+
+    if (id == null || id.isEmpty) return null;
+
+    final String image = images.isNotEmpty ? images.first.toString() : '';
+
+    return {
+      'id': id,
+      'type': type,
+      'title': title,
+      'artist': type == 'Artist' ? title : artist,
+      'album': album,
+      'duration': duration,
+      'views': views,
+      'year': year,
+      'countSongs': countSongs,
+      'subtitle': subtitle,
+      'image': image,
+      'images': images,
+      'subscribers': subscribers,
+    };
+  }
+
   Future<List<Map>> search(
     String query, {
     String? scope,
@@ -276,127 +473,108 @@ class YtMusicService {
       final List finalResults =
           nav(results, ['sectionListRenderer', 'contents']) as List? ?? [];
       for (final sectionItem in finalResults) {
-        final sectionSearchResults = [];
-        final String sectionTitle = nav(sectionItem, [
-          'musicShelfRenderer',
-          'title',
-          'runs',
-          0,
-          'text',
-        ]).toString();
-        final List sectionChildItems =
-            nav(sectionItem, ['musicShelfRenderer', 'contents']) as List? ?? [];
+        if (sectionItem is! Map) continue;
 
-        for (final childItem in sectionChildItems) {
-          final List images = (nav(childItem, [
-            'musicResponsiveListItemRenderer',
-            'thumbnail',
-            'musicThumbnailRenderer',
-            'thumbnail',
-            'thumbnails'
-          ]) as List)
-              .map((e) => e['url'])
-              .toList();
-          final String title = nav(childItem, [
-            'musicResponsiveListItemRenderer',
-            'flexColumns',
-            0,
-            'musicResponsiveListItemFlexColumnRenderer',
-            'text',
-            'runs',
-            0,
-            'text'
-          ]).toString();
-          final List subtitleList = nav(childItem, [
-            'musicResponsiveListItemRenderer',
-            'flexColumns',
-            1,
-            'musicResponsiveListItemFlexColumnRenderer',
-            'text',
-            'runs'
-          ]) as List;
-          // Logger.root.info('Looping child elements of "$title"');
-          int count = 0;
-          String type = '';
-          String album = '';
-          String artist = '';
-          String views = '';
-          String duration = '';
-          String subtitle = '';
-          String year = '';
-          String countSongs = '';
-          String subscribers = '';
-          for (final element in subtitleList) {
-            // ignore: use_string_buffers
-            subtitle += element['text'].toString();
-            if (element['text'].trim() == '•') {
-              count++;
-            } else {
-              if (count == 0) {
-                type += element['text'].toString();
-              }
-              if (count == 1) {
-                if (sectionTitle == 'Artists') {
-                  subscribers += element['text'].toString();
-                } else {
-                  if (element['text'].toString().trim() == '&') {
-                    artist += ', ';
-                  } else {
-                    artist += element['text'].toString();
+        // 1. Classical musicShelfRenderer
+        if (sectionItem.containsKey('musicShelfRenderer')) {
+          final shelf = sectionItem['musicShelfRenderer'] as Map;
+          final String sectionTitle = (shelf['title']?['runs']?[0]?['text'] ??
+                  'Top Result')
+              .toString();
+          final List sectionChildItems = (shelf['contents'] as List?) ?? [];
+          final sectionSearchResults = [];
+          for (final childItem in sectionChildItems) {
+            if (childItem is Map) {
+              final parsed = _parseResponsiveListItem(
+                childItem,
+                defaultSectionTitle: sectionTitle,
+              );
+              if (parsed != null) sectionSearchResults.add(parsed);
+            }
+          }
+          if (sectionSearchResults.isNotEmpty) {
+            searchResults.add({
+              'title': sectionTitle,
+              'items': sectionSearchResults,
+            });
+          }
+        }
+        // 2. Modern itemSectionRenderer
+        else if (sectionItem.containsKey('itemSectionRenderer')) {
+          final itemSection = sectionItem['itemSectionRenderer'] as Map;
+          final List subContents = (itemSection['contents'] as List?) ?? [];
+          for (final sub in subContents) {
+            if (sub is Map) {
+              if (sub.containsKey('musicShelfRenderer')) {
+                final shelf = sub['musicShelfRenderer'] as Map;
+                final String sectionTitle =
+                    (shelf['title']?['runs']?[0]?['text'] ?? 'Results')
+                        .toString();
+                final List sectionChildItems =
+                    (shelf['contents'] as List?) ?? [];
+                final sectionSearchResults = [];
+                for (final childItem in sectionChildItems) {
+                  if (childItem is Map) {
+                    final parsed = _parseResponsiveListItem(
+                      childItem,
+                      defaultSectionTitle: sectionTitle,
+                    );
+                    if (parsed != null) sectionSearchResults.add(parsed);
                   }
                 }
-              } else if (count == 2) {
-                if (sectionTitle == 'Songs') {
-                  album += element['text'].toString();
+                if (sectionSearchResults.isNotEmpty) {
+                  searchResults.add({
+                    'title': sectionTitle,
+                    'items': sectionSearchResults,
+                  });
                 }
-                if (sectionTitle == 'Videos') {
-                  views += element['text'].toString();
+              } else if (sub.containsKey('musicResponsiveListItemRenderer')) {
+                final parsed = _parseResponsiveListItem(sub);
+                if (parsed != null) {
+                  final String lower = parsed['type'].toString().toLowerCase();
+                  final String sTitle = (lower == 'song' || lower == 'single')
+                      ? 'Songs'
+                      : (lower == 'video')
+                          ? 'Videos'
+                          : (lower == 'album')
+                              ? 'Albums'
+                              : (lower == 'artist')
+                                  ? 'Artists'
+                                  : 'Results';
+                  final existingSection = searchResults.firstWhere(
+                    (s) => s['title'] == sTitle,
+                    orElse: () {
+                      final newSection = {'title': sTitle, 'items': []};
+                      searchResults.add(newSection);
+                      return newSection;
+                    },
+                  );
+                  (existingSection['items'] as List).add(parsed);
                 }
-                if (sectionTitle == 'Albums') {
-                  year += element['text'].toString();
-                }
-                if (sectionTitle.toLowerCase().contains('playlist')) {
-                  countSongs += element['text'].toString();
-                }
-              } else if (count == 3) {
-                duration += element['text'].toString();
               }
             }
           }
-          final List idNav = (type == 'Song' || type == 'Video')
-              ? [
-                  'musicResponsiveListItemRenderer',
-                  'playlistItemData',
-                  'videoId'
-                ]
-              : [
-                  'musicResponsiveListItemRenderer',
-                  'navigationEndpoint',
-                  'browseEndpoint',
-                  'browseId'
-                ];
-          final String id = nav(childItem, idNav).toString();
-          sectionSearchResults.add({
-            'id': id,
-            'type': type,
-            'title': title,
-            'artist': type == 'Artist' ? title : artist,
-            'album': album,
-            'duration': duration,
-            'views': views,
-            'year': year,
-            'countSongs': countSongs,
-            'subtitle': subtitle,
-            'image': images.first,
-            'images': images,
-            'subscribers': subscribers,
-          });
         }
-        if (sectionSearchResults.isNotEmpty) {
-          searchResults.add({
-            'title': sectionTitle,
-            'items': sectionSearchResults,
-          });
+        // 3. Top result card
+        else if (sectionItem.containsKey('musicCardShelfRenderer')) {
+          final card = sectionItem['musicCardShelfRenderer'] as Map;
+          final List cardContents = (card['contents'] as List?) ?? [];
+          final sectionSearchResults = [];
+          for (final childItem in cardContents) {
+            if (childItem is Map) {
+              final parsed = _parseResponsiveListItem(
+                childItem,
+                defaultSectionTitle: 'Top Result',
+              );
+              if (parsed != null) sectionSearchResults.add(parsed);
+            }
+          }
+          if (sectionSearchResults.isNotEmpty) {
+            searchResults.insert(0, {
+              'title': 'Top Result',
+              'items': sectionSearchResults,
+            });
+          }
         }
       }
       return searchResults;

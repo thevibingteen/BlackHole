@@ -96,6 +96,9 @@ Future<void> createBackup(
       for (int i = 0; i < files.length; i++) {
         files[i].delete();
       }
+      if (!await zipFile.exists() || await zipFile.length() == 0) {
+        throw Exception('Backup archive was not created or is empty');
+      }
       if (showDialog) {
         ShowSnackBar().showSnackBar(
           context,
@@ -129,6 +132,13 @@ Future<void> restore(
   Logger.root.info('Selected restore file path: $savePath');
   if (savePath != '') {
     final File zipFile = File(savePath);
+    if (!await zipFile.exists() || await zipFile.length() == 0) {
+      ShowSnackBar().showSnackBar(
+        context,
+        '${AppLocalizations.of(context)!.failedImport}\nError: Selected backup file does not exist or is empty',
+      );
+      return;
+    }
     final Directory tempDir = await getTemporaryDirectory();
     final Directory destinationDir = Directory('${tempDir.path}/restore');
 
@@ -144,7 +154,7 @@ Future<void> restore(
       for (int i = 0; i < files.length; i++) {
         final String backupPath = files[i].path;
         final String boxName =
-            backupPath.split('/').last.replaceAll('.hive', '');
+            backupPath.split(RegExp(r'[\\/]')).last.replaceAll('.hive', '');
         final Box box = await Hive.openBox(boxName);
         final String boxPath = box.path!;
         await box.close();

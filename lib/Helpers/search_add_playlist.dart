@@ -115,12 +115,23 @@ class SearchAddPlaylist {
   static Future<List> getRessoSongs({required String playlistId}) async {
     const url = 'https://api.resso.app/resso/playlist/detail?playlist_id=';
     final Uri link = Uri.parse(url + playlistId);
-    final Response response = await get(link);
-    if (response.statusCode != 200) {
-      return [];
+    try {
+      final Response response =
+          await get(link).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) {
+        Logger.root.warning(
+          'Resso service returned status ${response.statusCode} (service retired/unavailable)',
+        );
+        return [];
+      }
+      final res = jsonDecode(response.body);
+      if (res is Map && res['tracks'] is List) {
+        return res['tracks'] as List;
+      }
+    } catch (e) {
+      Logger.root.warning('Resso service error (service retired/unavailable): $e');
     }
-    final res = await jsonDecode(response.body);
-    return res['tracks'] as List;
+    return [];
   }
 
   static Future<Map> addJioSaavnPlaylist(String inLink) async {

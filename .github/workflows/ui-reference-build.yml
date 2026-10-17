@@ -20,24 +20,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout workflow branch
-        uses: actions/checkout@v4
-
-      - name: Checkout pinned original main source
+      - name: Checkout repository at branch root
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.ORIGINAL_MAIN_SHA }}
-          path: source
+          fetch-depth: 0
 
-      - name: Verify original main commit
+      - name: Verify baseline and enforce protected UI freeze
         run: |
-          cd source
-          echo "Checked out commit:"
-          git rev-parse HEAD
-          if [ "$(git rev-parse HEAD)" != "$ORIGINAL_MAIN_SHA" ]; then
-            echo "ERROR: Expected commit $ORIGINAL_MAIN_SHA but got $(git rev-parse HEAD)"
-            exit 1
-          fi
+          echo "Current HEAD commit: $(git rev-parse HEAD)"
+          echo "Comparing protected UI paths against pinned baseline $ORIGINAL_MAIN_SHA"
+          git fetch origin $ORIGINAL_MAIN_SHA
+          git diff --stat $ORIGINAL_MAIN_SHA -- lib/Screens lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
+          git diff --exit-code $ORIGINAL_MAIN_SHA -- lib/Screens lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
+          echo "UI Freeze validation PASSED: 0 diff in all protected UI directories."
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -52,78 +47,80 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Apply temporary UI Reference identity
+      - name: Apply temporary UI Reference identity (runner only)
         run: |
-          sed -i 's/applicationId "com.shadow.blackhole"/applicationId "com.shadow.blackhole.ui_reference"/' source/android/app/build.gradle
-          sed -i 's/android:label="BlackHole"/android:label="BlackHole UI Reference"/' source/android/app/src/main/AndroidManifest.xml
+          sed -i 's/applicationId "com.shadow.blackhole"/applicationId "com.shadow.blackhole.ui_reference"/' android/app/build.gradle
+          sed -i 's/android:label="BlackHole"/android:label="BlackHole UI Reference"/' android/app/src/main/AndroidManifest.xml
           echo "Verified application ID change:"
-          grep -n 'applicationId "com.shadow.blackhole.ui_reference"' source/android/app/build.gradle
+          grep -n 'applicationId "com.shadow.blackhole.ui_reference"' android/app/build.gradle
           echo "Verified launcher label change:"
-          grep -n 'android:label="BlackHole UI Reference"' source/android/app/src/main/AndroidManifest.xml
+          grep -n 'android:label="BlackHole UI Reference"' android/app/src/main/AndroidManifest.xml
 
       - name: Generate disposable test keystore and key.properties
         run: |
           keytool -genkeypair -v \
-            -keystore source/android/app/ui_reference.jks \
+            -keystore android/app/ui_reference.jks \
             -alias uireference \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass temppass123 -keypass temppass123 \
             -dname "CN=UI Reference, OU=BlackHole, O=BlackHole, L=Unknown, ST=Unknown, C=US"
 
-          cat <<EOF > source/android/key.properties
+          cat <<EOF > android/key.properties
           storePassword=temppass123
           keyPassword=temppass123
           keyAlias=uireference
-          storeFile=$GITHUB_WORKSPACE/source/android/app/ui_reference.jks
+          storeFile=$GITHUB_WORKSPACE/android/app/ui_reference.jks
           EOF
           echo "Disposable keystore and key.properties generated."
 
-      - name: Apply temporary CI-only audiotagger dependency replacement
+      - name: Apply temporary CI-only audiotagger dependency replacement (runner only)
         run: |
-          python3 -c "import re; p='source/pubspec.yaml'; s=open(p).read(); s=re.sub(r'  audiotagger:\n    git:\n      url: [^\n]+\n      ref: [^\n]+', '  audiotagger: 2.2.1', s); open(p,'w').write(s)"
+          python3 -c "import re; p='pubspec.yaml'; s=open(p).read(); s=re.sub(r'  audiotagger:\n    git:\n      url: [^\n]+\n      ref: [^\n]+', '  audiotagger: 2.2.1', s); open(p,'w').write(s)"
           echo "Verified audiotagger replacement in pubspec.yaml:"
-          grep -n "audiotagger:" source/pubspec.yaml
+          grep -n "audiotagger:" pubspec.yaml
 
       - name: Resolve dependencies (flutter pub get)
         run: |
-          cd source
           flutter pub get
 
-      - name: Build Split-ABI Release APKs
+      - name: Run deterministic backend unit tests
         run: |
-          cd source
-          flutter build apk --release --split-per-abi
+          flutter test test/backend_test.dart test/widget_test.dart
 
-      - name: Inspect generated APK files
+      - name: Build Split-ABI Release APKs from root
         run: |
-          echo "=== Flutter APK outputs ==="
-          ls -la source/build/app/outputs/flutter-apk/ || true
-          echo "=== APK release outputs ==="
-          ls -la source/build/app/outputs/apk/release/ || true
+          flutter build apk --release --split-per-abi --dart-define=SPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID || vars.SPOTIFY_CLIENT_ID || '' }}"
+
+      - name: Inspect and verify generated APK files
+        run: |
+          echo "=== Root Flutter APK outputs ==="
+          ls -la build/app/outputs/flutter-apk/ || true
+          for apk in build/app/outputs/flutter-apk/*release.apk; do
+            if [ -s "$apk" ]; then
+              echo "VERIFIED non-empty APK: $apk ($(stat -c%s "$apk") bytes)"
+            else
+              echo "ERROR: Missing or empty APK: $apk"
+              exit 1
+            fi
+          done
 
       - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
           name: blackhole-main-ui-reference-arm64
-          path: |
-            source/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            source/build/app/outputs/apk/release/app-arm64-v8a-release.apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
 
       - name: Upload armeabi-v7a APK
         uses: actions/upload-artifact@v4
         with:
           name: blackhole-main-ui-reference-armv7
-          path: |
-            source/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            source/build/app/outputs/apk/release/app-armeabi-v7a-release.apk
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
           if-no-files-found: error
 
       - name: Upload x86_64 APK
         uses: actions/upload-artifact@v4
         with:
           name: blackhole-main-ui-reference-x86_64
-          path: |
-            source/build/app/outputs/flutter-apk/app-x86_64-release.apk
-            source/build/app/outputs/apk/release/app-x86_64-release.apk
+          path: build/app/outputs/flutter-apk/app-x86_64-release.apk
           if-no-files-found: error

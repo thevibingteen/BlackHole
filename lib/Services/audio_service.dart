@@ -970,6 +970,8 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
           MediaAction.seek,
           MediaAction.seekForward,
           MediaAction.seekBackward,
+          MediaAction.skipToPrevious,
+          MediaAction.skipToNext,
         },
         androidCompactActionIndices: preferredCompactNotificationButtons,
         processingState: const {
