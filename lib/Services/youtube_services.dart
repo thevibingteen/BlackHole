@@ -119,14 +119,14 @@ class YouTubeServices {
     }
   }
 
-  Future<Playlist?> getPlaylistDetails(String id) async {
+  Future<Playlist> getPlaylistDetails(String id) async {
     try {
       final Playlist metadata =
           await yt.playlists.get(id).timeout(const Duration(seconds: 15));
       return metadata;
     } catch (e) {
       Logger.root.severe('Error in getPlaylistDetails for $id: $e');
-      return null;
+      rethrow;
     }
   }
 

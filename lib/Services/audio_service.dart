@@ -240,7 +240,6 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
             });
           }
         }
-      }
     });
 
     Rx.combineLatest4<int?, List<MediaItem>, bool, List<int>?, MediaItem?>(

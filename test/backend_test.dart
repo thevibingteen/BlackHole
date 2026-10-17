@@ -215,7 +215,7 @@ void main() {
       final encodedBytes = utf8.encode(jsonEncode({'syncedLyrics': syncedHindi, 'plainLyrics': ''}));
       final decoded = jsonDecode(utf8.decode(encodedBytes)) as Map;
       expect(decoded['syncedLyrics'], equals(syncedHindi));
-      expect(Lyrics.isHtmlOrChallenge(decoded['syncedLyrics']), isFalse);
+      expect(Lyrics.isHtmlOrChallenge(decoded['syncedLyrics'] as String), isFalse);
     });
   });
 
@@ -395,19 +395,19 @@ void main() {
       ];
 
       final filtered = rawSpotifyItems.where((item) {
-        final track = item['track'];
-        if (track == null || track is! Map) return false;
+        final dynamic track = item['track'];
+        if (track is! Map) return false;
         if (track['name'] == null) return false;
-        final album = track['album'];
+        final dynamic album = track['album'];
         if (album is! Map) return false;
-        final images = album['images'];
+        final dynamic images = album['images'];
         if (images is! List || images.isEmpty) return false;
         return true;
       }).toList();
 
       expect(filtered.length, equals(1));
       final firstItem = filtered.first;
-      final firstTrack = firstItem['track'] as Map;
+      final firstTrack = firstItem['track']! as Map;
       expect(firstTrack['name'], equals('Valid Song'));
     });
   });
