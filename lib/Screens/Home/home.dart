@@ -40,7 +40,7 @@ import 'package:blackhole/Screens/YouTube/youtube_home.dart';
 import 'package:blackhole/Services/ext_storage_provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -212,11 +212,8 @@ class _HomePageState extends State<HomePage> {
           }
         }
       });
-      if (Hive.box('settings').get('proxyIp') == '103.47.67.134') {
-        Hive.box('settings').put('proxyIp', '');
-      }
       if (Hive.box('settings').get('proxyIp') == null) {
-        Hive.box('settings').put('proxyIp', '');
+        Hive.box('settings').put('proxyIp', '103.47.67.134');
       }
       if (Hive.box('settings').get('proxyPort') == null) {
         Hive.box('settings').put('proxyPort', 8080);

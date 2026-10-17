@@ -25,7 +25,7 @@ import 'package:blackhole/CustomWidgets/textinput_dialog.dart';
 import 'package:blackhole/Helpers/audio_query.dart';
 import 'package:blackhole/Helpers/playlist.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive/hive.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
@@ -179,15 +179,15 @@ class AddToPlaylist {
                       title: AppLocalizations.of(context)!.createNewPlaylist,
                       onSubmitted: (String value) async {
                         final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
-                        String name = value.replaceAll(avoid, '').replaceAll('  ', ' ');
-                        if (name.trim() == '') {
-                          name = 'Playlist ${playlistNames.length}';
+                        value.replaceAll(avoid, '').replaceAll('  ', ' ');
+                        if (value.trim() == '') {
+                          value = 'Playlist ${playlistNames.length}';
                         }
-                        if (playlistNames.contains(name) ||
-                            await Hive.boxExists(name)) {
-                          name = '$name (1)';
+                        if (playlistNames.contains(value) ||
+                            await Hive.boxExists(value)) {
+                          value = '$value (1)';
                         }
-                        playlistNames.add(name);
+                        playlistNames.add(value);
                         settingsBox.put('playlistNames', playlistNames);
                         Navigator.pop(context);
                       },

@@ -1,11 +1,13 @@
 buildscript {
+   ext.kotlin_version = '1.6.10'
     repositories {
         google()
         mavenCentral()
     }
+
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0'
+       classpath 'com.android.tools.build:gradle:7.1.3'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 
@@ -19,73 +21,7 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
-    buildscript {
-        configurations.classpath {
-            resolutionStrategy {
-                force 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.0'
-            }
-        }
-    }
-}
-subprojects {
-    if (project.name != 'flutter_v1_embedding_shim' && project.name != 'app') {
-        project.evaluationDependsOn(':app')
-    }
-    project.plugins.withId("com.android.library") {
-        project.android {
-            compileSdkVersion 34
-            if (namespace == null) {
-                namespace project.group
-            }
-            compileOptions {
-                sourceCompatibility JavaVersion.VERSION_1_8
-                targetCompatibility JavaVersion.VERSION_1_8
-            }
-        }
-        if (project.name != 'flutter_v1_embedding_shim' && project.name != 'app') {
-            project.dependencies {
-                compileOnly project(':flutter_v1_embedding_shim')
-            }
-            project.tasks.withType(JavaCompile).configureEach { task ->
-                task.dependsOn(':flutter_v1_embedding_shim:compileReleaseJavaWithJavac')
-                task.doFirst {
-                    def shimTask = rootProject.findProject(':flutter_v1_embedding_shim')?.tasks?.findByName('compileReleaseJavaWithJavac')
-                    if (shimTask != null) {
-                        task.classpath = task.classpath + project.files(shimTask.destinationDirectory)
-                    }
-                    task.source.each { file ->
-                        if (file.name == 'AudiotaggerPlugin.java') {
-                            def content = file.text
-                            if (content.contains('PluginRegistry.Registrar')) {
-                                file.text = content.replaceAll(
-                                    /public\s+static\s+void\s+registerWith\s*\([^{]+\)\s*\{[\s\S]*?\n\s*\}/,
-                                    '// registerWith removed for Flutter v2 embedding'
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (project.name != 'app' && !project.state.executed) {
-        project.afterEvaluate {
-            if (project.plugins.hasPlugin("com.android.library")) {
-                project.android {
-                    compileSdkVersion 34
-                    buildToolsVersion "34.0.0"
-                }
-            }
-        }
-    }
-    project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
-        task.kotlinOptions {
-            jvmTarget = "1.8"
-        }
-        if (project.name != 'flutter_v1_embedding_shim' && project.name != 'app') {
-            task.dependsOn(':flutter_v1_embedding_shim:compileReleaseJavaWithJavac')
-        }
-    }
+    project.evaluationDependsOn(':app')
 }
 
 tasks.register("clean", Delete) {

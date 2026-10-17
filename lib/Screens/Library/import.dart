@@ -29,7 +29,7 @@ import 'package:blackhole/Helpers/search_add_playlist.dart';
 import 'package:blackhole/Helpers/spotify_helper.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
@@ -158,21 +158,9 @@ Future<void> connectToSpotify(
   final String? accessToken = await retriveAccessToken();
 
   if (accessToken == null) {
-    if (SpotifyApi().clientID.isEmpty) {
-      Logger.root.info('Spotify client ID not configured, skipping authorization launch');
-      ShowSnackBar().showSnackBar(
-        context,
-        'Spotify integration requires a configured Client ID',
-      );
-      return;
-    }
-    final verifier = SpotifyApi.generateCodeVerifier();
-    final challenge = SpotifyApi.generateCodeChallenge(verifier);
-    settingsBox.put('spotifyCodeVerifier', verifier);
-
     launchUrl(
       Uri.parse(
-        SpotifyApi().requestAuthorization(codeChallenge: challenge),
+        SpotifyApi().requestAuthorization(),
       ),
       mode: LaunchMode.externalApplication,
     );
@@ -181,17 +169,11 @@ Future<void> connectToSpotify(
       (uri) async {
         final link = uri.toString();
         if (link.contains('code=')) {
-          final uriParsed = Uri.parse(link);
-          final code = uriParsed.queryParameters['code'] ??
-              link.split('code=')[1].split('&')[0];
+          final code = link.split('code=')[1];
           settingsBox.put('spotifyAppCode', code);
-          final String? storedVerifier =
-              settingsBox.get('spotifyCodeVerifier')?.toString();
           final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
-          final List<String> data = await SpotifyApi().getAccessToken(
-            code: code,
-            codeVerifier: storedVerifier,
-          );
+          final List<String> data =
+              await SpotifyApi().getAccessToken(code: code);
           if (data.isNotEmpty) {
             settingsBox.put('spotifyAccessToken', data[0]);
             settingsBox.put('spotifyRefreshToken', data[1]);

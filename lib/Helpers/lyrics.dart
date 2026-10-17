@@ -42,16 +42,7 @@ class Lyrics {
       'id': id,
     };
 
-    Logger.root.info('Getting Synced Lyrics from LRCLIB');
-    final lrcLibRes = await getLrcLibLyrics(title: title, artist: artist);
-    if (lrcLibRes['lyrics'] != '') {
-      result['lyrics'] = lrcLibRes['lyrics']!;
-      result['type'] = lrcLibRes['type']!;
-      result['source'] = lrcLibRes['source']!;
-      return result;
-    }
-
-    Logger.root.info('Getting Synced Lyrics from Spotify');
+    Logger.root.info('Getting Synced Lyrics');
     final res = await getSpotifyLyrics(title, artist);
     result['lyrics'] = res['lyrics']!;
     result['type'] = res['type']!;
@@ -94,62 +85,11 @@ class Lyrics {
     return result;
   }
 
-  static Future<Map<String, String>> getLrcLibLyrics({
-    required String title,
-    required String artist,
-  }) async {
-    final Map<String, String> result = {
-      'lyrics': '',
-      'type': 'text',
-      'source': 'LRCLIB',
-    };
-    try {
-      final cleanTitle = title.split(' (').first.split(' - ').first.trim();
-      final cleanArtist = artist.split(',').first.split('&').first.trim();
-
-      final uri = Uri.https('lrclib.net', '/api/get', {
-        'track_name': cleanTitle.isNotEmpty ? cleanTitle : title,
-        'artist_name': cleanArtist.isNotEmpty ? cleanArtist : artist,
-      });
-      final res = await get(
-        uri,
-        headers: {'User-Agent': 'BlackHole-Music-Player'},
-      ).timeout(const Duration(seconds: 8));
-
-      if (res.statusCode == 200) {
-        final data = json.decode(res.body) as Map?;
-        if (data != null) {
-          final String? synced = data['syncedLyrics'] as String?;
-          final String? plain = data['plainLyrics'] as String?;
-          if (synced != null && synced.trim().isNotEmpty) {
-            result['lyrics'] = synced;
-            result['type'] = 'lrc';
-            return result;
-          } else if (plain != null && plain.trim().isNotEmpty) {
-            result['lyrics'] = plain;
-            result['type'] = 'text';
-            return result;
-          }
-        }
-      }
-    } catch (e) {
-      Logger.root.info('LRCLIB lyrics lookup failed or timed out: $e');
-    }
-    return result;
-  }
-
   static Future<String> getSaavnLyrics(String id) async {
     try {
       final Uri lyricsUrl = Uri.https(
         'www.jiosaavn.com',
-        '/api.php',
-        {
-          '__call': 'lyrics.getLyrics',
-          'lyrics_id': id,
-          'ctx': 'web6dot0',
-          'api_version': '4',
-          '_format': 'json',
-        },
+        '/api.php?__call=lyrics.getLyrics&lyrics_id=$id&ctx=web6dot0&api_version=4&_format=json',
       );
       final Response res =
           await get(lyricsUrl, headers: {'Accept': 'application/json'});

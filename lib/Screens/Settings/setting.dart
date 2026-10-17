@@ -38,7 +38,7 @@ import 'package:blackhole/main.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
@@ -1375,14 +1375,13 @@ class _SettingPageState extends State<SettingPage>
                                           ),
                                           onReorder:
                                               (int oldIndex, int newIndex) {
-                                            final int targetIndex =
-                                                oldIndex < newIndex
-                                                    ? newIndex - 1
-                                                    : newIndex;
+                                            if (oldIndex < newIndex) {
+                                              newIndex--;
+                                            }
                                             final temp = order.removeAt(
                                               oldIndex,
                                             );
-                                            order.insert(targetIndex, temp);
+                                            order.insert(newIndex, temp);
                                             setStt(
                                               () {},
                                             );
@@ -3069,10 +3068,11 @@ class _SettingPageState extends State<SettingPage>
                                   .toString(),
                               keyboardType: TextInputType.number,
                               onSubmitted: (String value) {
-                                final String finalVal =
-                                    value.trim().isEmpty ? '0' : value;
+                                if (value.trim() == '') {
+                                  value = '0';
+                                }
                                 Hive.box('settings')
-                                    .put('minDuration', int.parse(finalVal));
+                                    .put('minDuration', int.parse(value));
                                 Navigator.pop(context);
                               },
                             );

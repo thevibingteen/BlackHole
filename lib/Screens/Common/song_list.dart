@@ -34,7 +34,7 @@ import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Services/player_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:logging/logging.dart';
 import 'package:share_plus/share_plus.dart';
 

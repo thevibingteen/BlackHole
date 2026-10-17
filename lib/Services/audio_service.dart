@@ -25,11 +25,9 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/Helpers/mediaitem_converter.dart';
-import 'package:blackhole/Helpers/playback_retry_policy.dart';
 import 'package:blackhole/Helpers/playlist.dart';
 import 'package:blackhole/Screens/Player/audioplayer.dart';
 import 'package:blackhole/Services/isolate_service.dart';
-import 'package:blackhole/Services/youtube_services.dart';
 import 'package:blackhole/Services/yt_music.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive/hive.dart';
@@ -64,7 +62,6 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   Box downloadsBox = Hive.box('downloads');
   final List<String> refreshLinks = [];
   bool jobRunning = false;
-  final PlaybackRetryPolicy _retryPolicy = PlaybackRetryPolicy();
 
   final BehaviorSubject<List<MediaItem>> _recentSubject =
       BehaviorSubject.seeded(<MediaItem>[]);
@@ -151,7 +148,6 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     Logger.root.info('checking connectivity & setting quality');
 
     Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      _retryPolicy.reset();
       if (result == ConnectivityResult.mobile) {
         connectionType = 'mobile';
         Logger.root.info(
@@ -194,7 +190,6 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
         Hive.box('settings').get('loadStart', defaultValue: true) as bool;
 
     mediaItem.whereType<MediaItem>().listen((item) {
-      _retryPolicy.resetIfDifferentTrack(item.id);
       if (count != null) {
         count = count! - 1;
         if (count! <= 0) {
@@ -263,11 +258,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     }).whereType<MediaItem>().distinct().listen(mediaItem.add);
 
     // Propagate all events from the audio player to AudioService clients.
-    _player!.playbackEventStream.listen(_broadcastState,
-        onError: (Object e, StackTrace st) {
-      Logger.root.severe('Playback event error: $e');
-      _handlePlaybackError(e);
-    });
+    _player!.playbackEventStream.listen(_broadcastState);
 
     _player!.shuffleModeEnabledStream
         .listen((enabled) => _broadcastState(_player!.playbackEvent));
@@ -392,76 +383,6 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     addQueueItem(newItem);
   }
 
-  Future<void> _handlePlaybackError(Object error) async {
-    if (_retryPolicy.isHandling) return;
-    _retryPolicy.beginHandling();
-    try {
-      final currentItem = mediaItem.value;
-      if (currentItem == null || currentItem.genre != 'YouTube') {
-        Logger.root.severe('Playback error on non-YouTube track: $error');
-        return;
-      }
-      final videoId = currentItem.id;
-      if (!_retryPolicy.shouldRetry(videoId)) {
-        Logger.root.severe(
-          'YouTube playback retry already attempted for $videoId. Halting to prevent retry loop. Error: $error',
-        );
-        playbackState.add(
-          playbackState.value.copyWith(
-            processingState: AudioProcessingState.error,
-            errorMessage: 'Playback error: stream unavailable after retry ($error)',
-          ),
-        );
-        return;
-      }
-
-      Logger.root.warning(
-        'YouTube playback error for $videoId ($error). Invalidating cache and retrying once...',
-      );
-      await YouTubeServices().invalidateCache(videoId);
-      final Map? freshData = await YouTubeServices().refreshLink(videoId);
-      if (freshData == null ||
-          freshData['url'] == null ||
-          freshData['url'].toString().isEmpty) {
-        Logger.root.severe('Failed to refresh YouTube stream for $videoId.');
-        playbackState.add(
-          playbackState.value.copyWith(
-            processingState: AudioProcessingState.error,
-            errorMessage: 'Playback error: failed to refresh YouTube stream for $videoId',
-          ),
-        );
-        return;
-      }
-
-      final int? currentIndex = _player?.currentIndex;
-      if (currentIndex != null &&
-          currentIndex >= 0 &&
-          currentIndex < _playlist.children.length) {
-        final MediaItem newItem = MediaItemConverter.mapToMediaItem(freshData);
-        AudioSource newSource;
-        if (cacheSong) {
-          newSource = LockCachingAudioSource(
-            Uri.parse(freshData['url'].toString()),
-          );
-        } else {
-          newSource = AudioSource.uri(
-            Uri.parse(freshData['url'].toString()),
-          );
-        }
-        _mediaItemExpando[newSource] = newItem;
-        await _playlist.removeAt(currentIndex);
-        await _playlist.insert(currentIndex, newSource);
-        await _player?.seek(Duration.zero, index: currentIndex);
-        await _player?.play();
-        Logger.root.info('Successfully refreshed stream and retried playback for $videoId');
-      }
-    } catch (e) {
-      Logger.root.severe('Error while handling YouTube playback error: $e');
-    } finally {
-      _retryPolicy.endHandling();
-    }
-  }
-
   AudioSource? _itemToSource(MediaItem mediaItem) {
     AudioSource? audioSource;
     if (mediaItem.artUri.toString().startsWith('file:')) {
@@ -478,8 +399,8 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
       } else {
         if (mediaItem.genre == 'YouTube') {
           final int expiredAt =
-              int.tryParse((mediaItem.extras!['expire_at'] ?? '0').toString()) ?? 0;
-          if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600 >
+              int.parse((mediaItem.extras!['expire_at'] ?? '0').toString());
+          if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 >
               expiredAt) {
             // Logger.root.info(
             //   'player | youtube link expired for ${mediaItem.title}, searching cache',
@@ -488,8 +409,8 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
               final Map cachedData =
                   Hive.box('ytlinkcache').get(mediaItem.id) as Map;
               final int cachedExpiredAt =
-                  int.tryParse(cachedData['expire_at']?.toString() ?? '0') ?? 0;
-              if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 600 >
+                  int.parse(cachedData['expire_at'].toString());
+              if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 >
                   cachedExpiredAt) {
                 Logger.root.info(
                   'youtube link expired for ${mediaItem.title}, refreshing',
@@ -829,14 +750,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   }
 
   @override
-  Future<void> play() async {
-    try {
-      await _player!.play();
-    } catch (e) {
-      Logger.root.severe('Error in play(): $e');
-      await _handlePlaybackError(e);
-    }
-  }
+  Future<void> play() => _player!.play();
 
   @override
   Future<void> pause() async {
@@ -852,7 +766,6 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   @override
   Future<void> stop() async {
     Logger.root.info('stopping player');
-    _retryPolicy.reset();
     await _player!.stop();
     await playbackState.firstWhere(
       (state) => state.processingState == AudioProcessingState.idle,

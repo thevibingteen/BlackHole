@@ -19,10 +19,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
-import 'package:crypto/crypto.dart';
-import 'package:hive/hive.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 
@@ -35,25 +32,8 @@ class SpotifyApi {
   ];
 
   /// You can signup for spotify developer account and get your own clientID and clientSecret incase you don't want to use these
-  String get clientID {
-    const envId = String.fromEnvironment('SPOTIFY_CLIENT_ID');
-    if (envId.isNotEmpty) return envId;
-    if (Hive.isBoxOpen('settings')) {
-      final custom = Hive.box('settings').get('spotifyClientId')?.toString().trim();
-      if (custom != null && custom.isNotEmpty) return custom;
-    }
-    return '';
-  }
-
-  String get clientSecret {
-    const envSecret = String.fromEnvironment('SPOTIFY_CLIENT_SECRET');
-    if (envSecret.isNotEmpty) return envSecret;
-    if (Hive.isBoxOpen('settings')) {
-      final custom = Hive.box('settings').get('spotifyClientSecret')?.toString().trim();
-      if (custom != null && custom.isNotEmpty) return custom;
-    }
-    return '';
-  }
+  final String clientID = 'fcaf490c5719430595cd17c577c04489';
+  final String clientSecret = '8a62961b8e614cb38e99c4d9a7ebf5ca';
   final String redirectUrl = 'app://blackhole/auth';
   final String spotifyApiUrl = 'https://accounts.spotify.com/api';
   final String spotifyApiBaseUrl = 'https://api.spotify.com/v1';
@@ -64,30 +44,8 @@ class SpotifyApi {
   final String spotifyBaseUrl = 'https://accounts.spotify.com';
   final String requestToken = 'https://accounts.spotify.com/api/token';
 
-  /// Generates a cryptographically random PKCE code verifier (RFC 7636).
-  static String generateCodeVerifier([int length = 64]) {
-    const charset =
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    final random = Random.secure();
-    return List.generate(
-      length,
-      (_) => charset[random.nextInt(charset.length)],
-    ).join();
-  }
-
-  /// Derives an S256 code challenge from a [codeVerifier] (RFC 7636).
-  static String generateCodeChallenge(String codeVerifier) {
-    final bytes = ascii.encode(codeVerifier);
-    final digest = sha256.convert(bytes);
-    return base64Url.encode(digest.bytes).replaceAll('=', '');
-  }
-
-  String requestAuthorization({String? codeChallenge}) {
-    final challengeParam = (codeChallenge != null && codeChallenge.isNotEmpty)
-        ? '&code_challenge_method=S256&code_challenge=$codeChallenge'
-        : '';
-    return 'https://accounts.spotify.com/authorize?client_id=$clientID&response_type=code&redirect_uri=$redirectUrl&scope=${_scopes.join('%20')}$challengeParam';
-  }
+  String requestAuthorization() =>
+      'https://accounts.spotify.com/authorize?client_id=$clientID&response_type=code&redirect_uri=$redirectUrl&scope=${_scopes.join('%20')}';
 
   // Future<String> authenticate() async {
   //   final url = SpotifyApi().requestAuthorization();
@@ -108,39 +66,27 @@ class SpotifyApi {
   Future<List<String>> getAccessToken({
     String? code,
     String? refreshToken,
-    String? codeVerifier,
   }) async {
-    if (clientID.isEmpty) {
-      Logger.root.info('Spotify client credentials not configured.');
-      return [];
-    }
     final Map<String, String> headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization':
+          "Basic ${base64.encode(utf8.encode("$clientID:$clientSecret"))}",
     };
 
-    final Map<String, String> body = {};
+    Map<String, String>? body;
     if (code != null) {
-      body['grant_type'] = 'authorization_code';
-      body['code'] = code;
-      body['redirect_uri'] = redirectUrl;
-      body['client_id'] = clientID;
-      if (codeVerifier != null && codeVerifier.isNotEmpty) {
-        body['code_verifier'] = codeVerifier;
-      } else if (clientSecret.isNotEmpty) {
-        headers['Authorization'] =
-            "Basic ${base64.encode(utf8.encode("$clientID:$clientSecret"))}";
-      }
+      body = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': redirectUrl
+      };
     } else if (refreshToken != null) {
-      body['grant_type'] = 'refresh_token';
-      body['refresh_token'] = refreshToken;
-      body['client_id'] = clientID;
-      if (clientSecret.isNotEmpty) {
-        headers['Authorization'] =
-            "Basic ${base64.encode(utf8.encode("$clientID:$clientSecret"))}";
-      }
+      body = {
+        'grant_type': 'refresh_token',
+        'refresh_token': refreshToken,
+      };
     }
 
-    if (body.isEmpty) {
+    if (body == null) {
       return [];
     }
 

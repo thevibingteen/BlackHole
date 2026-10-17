@@ -1,11 +1,3 @@
-analyzer:
-  exclude:
-    - build/**
-    - android/**
-    - ios/**
-    - windows/**
-    - macos/**
-    - linux/**
 include: package:lint/analysis_options.yaml
 
 linter:

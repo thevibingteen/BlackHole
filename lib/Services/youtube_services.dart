@@ -95,8 +95,7 @@ class YouTubeServices {
     } catch (e) {
       quality = 'Low';
     }
-    final Map? data =
-        await formatVideo(video: res, quality: quality, forceRefresh: true);
+    final Map? data = await formatVideo(video: res, quality: quality);
     return data;
   }
 
@@ -340,110 +339,61 @@ class YouTubeServices {
     }
   }
 
-  static final Map<String, Future<List<String>>> _inFlightStreamRequests = {};
-
-  static Future<void> pruneExpiredCache() async {
-    try {
-      if (!Hive.isBoxOpen('ytlinkcache')) return;
-      final box = Hive.box('ytlinkcache');
-      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final expiredKeys = <dynamic>[];
-      for (final key in box.keys) {
-        final entry = box.get(key);
-        if (entry is Map) {
-          final expireAt = int.tryParse(entry['expire_at']?.toString() ?? '') ?? 0;
-          if (expireAt <= now) {
-            expiredKeys.add(key);
-          }
-        } else {
-          expiredKeys.add(key);
-        }
-      }
-      if (expiredKeys.isNotEmpty) {
-        await box.deleteAll(expiredKeys);
-        Logger.root.info('Pruned ${expiredKeys.length} expired entries from ytlinkcache');
-      }
-    } catch (e) {
-      Logger.root.severe('Error pruning expired ytlinkcache: $e');
-    }
-  }
-
-  Future<void> invalidateCache(String videoId) async {
-    try {
-      if (Hive.isBoxOpen('ytlinkcache')) {
-        await Hive.box('ytlinkcache').delete(videoId);
-        Logger.root.info('ytlinkcache invalidated for video: $videoId');
-      }
-    } catch (e) {
-      Logger.root.severe('Error invalidating ytlinkcache for $videoId: $e');
-    }
-  }
-
   Future<Map?> formatVideo({
     required Video video,
     required String quality,
     Map? data,
     bool getUrl = true,
-    bool forceRefresh = false,
+    // bool preferM4a = true,
   }) async {
     if (video.duration?.inSeconds == null) return null;
     List<String> urls = [];
     String finalUrl = '';
     String expireAt = '0';
-    final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
     if (getUrl) {
-      // check cache if not forcing refresh
-      if (!forceRefresh &&
-          Hive.isBoxOpen('ytlinkcache') &&
-          Hive.box('ytlinkcache').containsKey(video.id.value)) {
+      // check cache first
+      if (Hive.box('ytlinkcache').containsKey(video.id.value)) {
         final Map cachedData =
             Hive.box('ytlinkcache').get(video.id.value) as Map;
         final int cachedExpiredAt =
-            int.tryParse(cachedData['expire_at']?.toString() ?? '0') ?? 0;
-        final String? cachedQuality = cachedData['quality']?.toString();
-
-        // Require 10-minute (600s) safety buffer and matching quality
-        if (now + 600 < cachedExpiredAt &&
-            (cachedQuality == null || cachedQuality == quality)) {
-          Logger.root.info('Valid cache found for ${video.id.value}');
-          finalUrl = cachedData['url']?.toString() ?? '';
-          expireAt = cachedExpiredAt.toString();
-          urls = [
-            cachedData['lowUrl']?.toString() ?? finalUrl,
-            cachedData['highUrl']?.toString() ?? finalUrl,
-          ];
+            int.parse(cachedData['expire_at'].toString());
+        if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 >
+            cachedExpiredAt) {
+          // cache expired
+          urls = await getUri(video);
+        } else {
+          // giving cache link
+          Logger.root.info('cache found for ${video.id.value}');
+          urls = [cachedData['url'].toString()];
         }
+      } else {
+        //cache not present
+        urls = await getUri(video);
       }
 
-      if (finalUrl.isEmpty) {
-        urls = await getUri(video);
-        if (urls.isEmpty) return null;
+      finalUrl = quality == 'High' ? urls.last : urls.first;
+      expireAt = RegExp('expire=(.*?)&').firstMatch(finalUrl)!.group(1) ??
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600 * 5.5)
+              .toString();
 
-        finalUrl = quality == 'High' ? urls.last : urls.first;
-        final match = RegExp(r'expire=([0-9]+)').firstMatch(finalUrl);
-        final int parsedExpire = match != null
-            ? (int.tryParse(match.group(1)!) ?? (now + 18000))
-            : (now + 18000);
-        expireAt = parsedExpire.toString();
-
-        if (Hive.isBoxOpen('ytlinkcache')) {
-          try {
-            await Hive.box('ytlinkcache').put(
-              video.id.value,
-              {
-                'url': finalUrl,
-                'expire_at': expireAt,
-                'quality': quality,
-                'lowUrl': urls.first,
-                'highUrl': urls.last,
-                'cached_at': now,
-              },
-            );
-          } catch (e) {
-            Logger.root.severe('Hive Error in formatVideo: $e');
-          }
-        }
+      try {
+        await Hive.box('ytlinkcache').put(
+          video.id.value,
+          {
+            'url': finalUrl,
+            'expire_at': expireAt,
+            'lowUrl': urls.first,
+            'highUrl': urls.last,
+          },
+        ).onError(
+          (error, stackTrace) => Logger.root.severe(
+            'Hive Error in formatVideo, you probably forgot to open box.\nError: $error',
+          ),
+        );
+      } catch (e) {
+        Logger.root.severe(
+          'Hive Error in formatVideo, you probably forgot to open box.\nError: $e',
+        );
       }
     }
     return {
@@ -474,6 +424,49 @@ class YouTubeServices {
           (data?['subtitle'] ?? '') != '' ? data!['subtitle'] : video.author,
       'perma_url': video.url,
     };
+    // For invidous
+    // if (video['liveNow'] == true) return null;
+    // try {
+    //   final Uri link = Uri.https(
+    //     'invidious.snopyta.org',
+    //     'api/v1/videos/${video["videoId"]}',
+    //   );
+    //   final Response response = await get(link, headers: headers);
+    //   if (response.statusCode != 200) {
+    //     return {};
+    //   }
+    //   final jsonData = jsonDecode(response.body) as Map;
+    //   final urls = (jsonData['adaptiveFormats'] as List)
+    //       .where((e) => e['container'] == 'm4a');
+
+    //   return {
+    //     'id': jsonData['videoId'],
+    //     'album': jsonData['author'],
+    //     'duration': jsonData['lengthSeconds'],
+    //     'title': jsonData['title'],
+    //     'artist': jsonData['author'],
+    //     'image': jsonData['videoThumbnails'][0]['url'],
+    //     'secondImage': jsonData['videoThumbnails'][2]?['url'],
+    //     'language': 'YouTube',
+    //     'genre': 'YouTube',
+    //     'url':
+    //         'https://yewtu.be/latest_version?id=${video["videoId"]}&itag=${quality == "High" ? 140 : 139}&local=true&listen=1',
+    //     'lowUrl':
+    //         'https://yewtu.be/latest_version?id=09cZRYupO4s&itag=139&local=true&listen=1',
+    //     'highUrl':
+    //         'https://yewtu.be/latest_version?id=09cZRYupO4s&itag=140&local=true&listen=1',
+    //     'year': jsonData['published'].toString().yearFromEpoch,
+    //     '320kbps': 'false',
+    //     'has_lyrics': 'false',
+    //     'release_date': jsonData['published'].toString().dateFromEpoch,
+    //     'album_id': jsonData['authorId'].toString(),
+    //     'artist_id': jsonData['authorId'].toString(),
+    //     'subtitle': jsonData['author'],
+    //     'perma_url': 'https://youtube.com/watch?v=${jsonData["videoId"]}',
+    //   };
+    // } catch (e) {
+    //   return {};
+    // }
   }
 
   Future<List<Map>> fetchSearchResults(String query) async {
@@ -489,61 +482,89 @@ class YouTubeServices {
         'items': videoResult,
       }
     ];
+    // return searchResults;
+
+    // For parsing html
+    // Uri link = Uri.https(searchAuthority, searchPath, {"search_query": query});
+    // final Response response = await get(link);
+    // if (response.statusCode != 200) {
+    // return [];
+    // }
+    // List searchResults = RegExp(
+    // r'\"videoId\"\:\"(.*?)\",\"thumbnail\"\:\{\"thumbnails\"\:\[\{\"url\"\:\"(.*?)".*?\"title\"\:\{\"runs\"\:\[\{\"text\"\:\"(.*?)\"\}\].*?\"longBylineText\"\:\{\"runs\"\:\[\{\"text\"\:\"(.*?)\",.*?\"lengthText\"\:\{\"accessibility\"\:\{\"accessibilityData\"\:\{\"label\"\:\"(.*?)\"\}\},\"simpleText\"\:\"(.*?)\"\},\"viewCountText\"\:\{\"simpleText\"\:\"(.*?) views\"\}.*?\"commandMetadata\"\:\{\"webCommandMetadata\"\:\{\"url\"\:\"(/watch?.*?)\".*?\"shortViewCountText\"\:\{\"accessibility\"\:\{\"accessibilityData\"\:\{\"label\"\:\"(.*?) views\"\}\},\"simpleText\"\:\"(.*?) views\"\}.*?\"channelThumbnailSupportedRenderers\"\:\{\"channelThumbnailWithLinkRenderer\"\:\{\"thumbnail\"\:\{\"thumbnails\"\:\[\{\"url\"\:\"(.*?)\"')
+    // .allMatches(response.body)
+    // .map((m) {
+    // List<String> parts = m[6].toString().split(':');
+    // int dur;
+    // if (parts.length == 3)
+    // dur = int.parse(parts[0]) * 60 * 60 +
+    // int.parse(parts[1]) * 60 +
+    // int.parse(parts[2]);
+    // if (parts.length == 2)
+    // dur = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+    // if (parts.length == 1) dur = int.parse(parts[0]);
+
+    // return {
+    //   'id': m[1],
+    //   'image': m[2],
+    //   'title': m[3],
+    //     'longLength': m[5],
+    //     'length': m[6],
+    //     'totalViewsCount': m[7],
+    //     'url': 'https://www.youtube.com' + m[8],
+    //     'album': '',
+    //     'channelName': m[4],
+    //     'channelImage': m[11],
+    //     'duration': dur.toString(),
+    //     'longViews': m[9] + ' views',
+    //     'views': m[10] + ' views',
+    //     'artist': '',
+    //     "year": '',
+    //     "language": '',
+    //     "320kbps": '',
+    //     "has_lyrics": '',
+    //     "release_date": '',
+    //     "album_id": '',
+    //     'subtitle': '',
+    //   };
+    // }).toList();
+    // For invidous
+    // try {
+    //   final Uri link =
+    //       Uri.https('invidious.snopyta.org', 'api/v1/search', {'q': query});
+    //   final Response response = await get(link, headers: headers);
+    //   if (response.statusCode != 200) {
+    //     return [];
+    //   }
+    //   return jsonDecode(response.body) as List;
+    // } catch (e) {
+    //   return [];
+    // }
   }
 
-  Future<List<String>> getUri(Video video) async {
-    // Prevent duplicate simultaneous requests for the same video ID
-    if (_inFlightStreamRequests.containsKey(video.id.value)) {
-      return _inFlightStreamRequests[video.id.value]!;
-    }
+  Future<List<String>> getUri(
+    Video video,
+    // {bool preferM4a = true}
+  ) async {
+    final StreamManifest manifest =
+        await yt.videos.streamsClient.getManifest(video.id);
+    final List<AudioOnlyStreamInfo> sortedStreamInfo =
+        manifest.audioOnly.sortByBitrate();
+    if (Platform.isIOS || Platform.isMacOS) {
+      final List<AudioOnlyStreamInfo> m4aStreams = sortedStreamInfo
+          .where((element) => element.audioCodec.contains('mp4'))
+          .toList();
 
-    final Future<List<String>> fetchFuture = _fetchUriInternal(video);
-    _inFlightStreamRequests[video.id.value] = fetchFuture;
-    try {
-      final result = await fetchFuture;
-      return result;
-    } finally {
-      _inFlightStreamRequests.remove(video.id.value);
-    }
-  }
-
-  Future<List<String>> _fetchUriInternal(Video video) async {
-    try {
-      final StreamManifest manifest =
-          await yt.videos.streamsClient.getManifest(video.id);
-      final List<AudioOnlyStreamInfo> sortedStreamInfo =
-          manifest.audioOnly.sortByBitrate();
-
-      if (sortedStreamInfo.isEmpty) {
-        final muxed = manifest.muxed.sortByBitrate();
-        if (muxed.isNotEmpty) {
-          return [muxed.first.url.toString(), muxed.last.url.toString()];
-        }
-        return [];
+      if (m4aStreams.isNotEmpty) {
+        return [
+          m4aStreams.first.url.toString(),
+          m4aStreams.last.url.toString(),
+        ];
       }
-
-      if (Platform.isIOS || Platform.isMacOS) {
-        final List<AudioOnlyStreamInfo> m4aStreams = sortedStreamInfo
-            .where((element) => element.audioCodec.contains('mp4'))
-            .toList();
-
-        if (m4aStreams.isNotEmpty) {
-          return [
-            m4aStreams.first.url.toString(),
-            m4aStreams.last.url.toString(),
-          ];
-        }
-      }
-      return [
-        sortedStreamInfo.first.url.toString(),
-        sortedStreamInfo.last.url.toString(),
-      ];
-    } catch (e) {
-      Logger.root.severe(
-        'Error getting YouTube stream manifest for ${video.id.value}: $e',
-      );
-      return [];
     }
+    return [
+      sortedStreamInfo.first.url.toString(),
+      sortedStreamInfo.last.url.toString(),
+    ];
   }
-
 }

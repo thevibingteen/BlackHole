@@ -28,9 +28,8 @@ import 'package:blackhole/Screens/Search/search.dart';
 import 'package:blackhole/Screens/Settings/setting.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:logging/logging.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 List localSongs = [];
@@ -199,16 +198,9 @@ Future<void> scrapData(String type, {bool signIn = false}) async {
   }
   final String? accessToken = await retriveAccessToken();
   if (accessToken == null) {
-    if (SpotifyApi().clientID.isEmpty) {
-      Logger.root.info('Spotify client ID not configured, skipping authorization launch');
-      return;
-    }
-    final verifier = SpotifyApi.generateCodeVerifier();
-    final challenge = SpotifyApi.generateCodeChallenge(verifier);
-    Hive.box('settings').put('spotifyCodeVerifier', verifier);
     launchUrl(
       Uri.parse(
-        SpotifyApi().requestAuthorization(codeChallenge: challenge),
+        SpotifyApi().requestAuthorization(),
       ),
       mode: LaunchMode.externalApplication,
     );
@@ -217,17 +209,11 @@ Future<void> scrapData(String type, {bool signIn = false}) async {
       (uri) async {
         final link = uri.toString();
         if (link.contains('code=')) {
-          final uriParsed = Uri.parse(link);
-          final code = uriParsed.queryParameters['code'] ??
-              link.split('code=')[1].split('&')[0];
+          final code = link.split('code=')[1];
           Hive.box('settings').put('spotifyAppCode', code);
-          final String? storedVerifier =
-              Hive.box('settings').get('spotifyCodeVerifier')?.toString();
           final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
-          final List<String> data = await SpotifyApi().getAccessToken(
-            code: code,
-            codeVerifier: storedVerifier,
-          );
+          final List<String> data =
+              await SpotifyApi().getAccessToken(code: code);
           if (data.isNotEmpty) {
             Hive.box('settings').put('spotifyAccessToken', data[0]);
             Hive.box('settings').put('spotifyRefreshToken', data[1]);

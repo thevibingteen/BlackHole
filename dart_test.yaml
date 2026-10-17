@@ -1,6 +1,0 @@
-# Configuration for Dart/Flutter tests
-tags:
-  smoke:
-    timeout: 30s
-  unit:
-  integration:

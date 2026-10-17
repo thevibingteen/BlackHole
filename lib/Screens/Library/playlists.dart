@@ -26,7 +26,7 @@ import 'package:blackhole/Helpers/import_export_playlist.dart';
 import 'package:blackhole/Screens/Library/import.dart';
 import 'package:blackhole/Screens/Library/liked.dart';
 import 'package:flutter/material.dart';
-import 'package:blackhole/localization/app_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
@@ -92,16 +92,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           keyboardType: TextInputType.name,
                           onSubmitted: (String value) async {
                             final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
-                            String name = value.replaceAll(avoid, '').replaceAll('  ', ' ');
-                            if (name.trim() == '') {
-                              name = 'Playlist ${playlistNames.length}';
+                            value.replaceAll(avoid, '').replaceAll('  ', ' ');
+                            if (value.trim() == '') {
+                              value = 'Playlist ${playlistNames.length}';
                             }
-                            while (playlistNames.contains(name) ||
-                                await Hive.boxExists(name)) {
+                            while (playlistNames.contains(value) ||
+                                await Hive.boxExists(value)) {
                               // ignore: use_string_buffers
-                              name = '$name (1)';
+                              value = '$value (1)';
                             }
-                            playlistNames.add(name);
+                            playlistNames.add(value);
                             settingsBox.put('playlistNames', playlistNames);
                             Navigator.pop(context);
                           },
