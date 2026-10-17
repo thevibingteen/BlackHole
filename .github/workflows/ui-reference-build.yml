@@ -1,0 +1,123 @@
+name: UI Reference Build
+
+on:
+  push:
+    branches:
+      - 'ui-reference-build/*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ORIGINAL_MAIN_SHA: "fda23d5236d457a474e40e571010d24666e97f86"
+  JAVA_VERSION: "11"
+  FLUTTER_VERSION: "3.10.6"
+
+jobs:
+  build_ui_reference:
+    name: Build Original Main UI Reference APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout workflow branch
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned original main source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.ORIGINAL_MAIN_SHA }}
+          path: source
+
+      - name: Verify original main commit
+        run: |
+          cd source
+          echo "Checked out commit:"
+          git rev-parse HEAD
+          if [ "$(git rev-parse HEAD)" != "$ORIGINAL_MAIN_SHA" ]; then
+            echo "ERROR: Expected commit $ORIGINAL_MAIN_SHA but got $(git rev-parse HEAD)"
+            exit 1
+          fi
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Apply temporary UI Reference identity
+        run: |
+          sed -i 's/applicationId "com.shadow.blackhole"/applicationId "com.shadow.blackhole.ui_reference"/' source/android/app/build.gradle
+          sed -i 's/android:label="BlackHole"/android:label="BlackHole UI Reference"/' source/android/app/src/main/AndroidManifest.xml
+          echo "Verified application ID change:"
+          grep -n 'applicationId "com.shadow.blackhole.ui_reference"' source/android/app/build.gradle
+          echo "Verified launcher label change:"
+          grep -n 'android:label="BlackHole UI Reference"' source/android/app/src/main/AndroidManifest.xml
+
+      - name: Generate disposable test keystore and key.properties
+        run: |
+          keytool -genkeypair -v \
+            -keystore source/android/app/ui_reference.jks \
+            -alias uireference \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass temppass123 -keypass temppass123 \
+            -dname "CN=UI Reference, OU=BlackHole, O=BlackHole, L=Unknown, ST=Unknown, C=US"
+
+          cat <<EOF > source/android/key.properties
+          storePassword=temppass123
+          keyPassword=temppass123
+          keyAlias=uireference
+          storeFile=$GITHUB_WORKSPACE/source/android/app/ui_reference.jks
+          EOF
+          echo "Disposable keystore and key.properties generated."
+
+      - name: Resolve dependencies (flutter pub get)
+        run: |
+          cd source
+          flutter pub get
+
+      - name: Build Split-ABI Release APKs
+        run: |
+          cd source
+          flutter build apk --release --split-per-abi
+
+      - name: Inspect generated APK files
+        run: |
+          echo "=== Flutter APK outputs ==="
+          ls -la source/build/app/outputs/flutter-apk/ || true
+          echo "=== APK release outputs ==="
+          ls -la source/build/app/outputs/apk/release/ || true
+
+      - name: Upload arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: blackhole-main-ui-reference-arm64
+          path: |
+            source/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            source/build/app/outputs/apk/release/app-arm64-v8a-release.apk
+          if-no-files-found: error
+
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: blackhole-main-ui-reference-armv7
+          path: |
+            source/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            source/build/app/outputs/apk/release/app-armeabi-v7a-release.apk
+          if-no-files-found: error
+
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: blackhole-main-ui-reference-x86_64
+          path: |
+            source/build/app/outputs/flutter-apk/app-x86_64-release.apk
+            source/build/app/outputs/apk/release/app-x86_64-release.apk
+          if-no-files-found: error
