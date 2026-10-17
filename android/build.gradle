@@ -28,7 +28,7 @@ subprojects {
     }
 }
 subprojects {
-    if (project.name != 'flutter_v1_embedding_shim') {
+    if (project.name != 'flutter_v1_embedding_shim' && project.name != 'app') {
         project.evaluationDependsOn(':app')
     }
     project.plugins.withId("com.android.library") {
@@ -68,10 +68,13 @@ subprojects {
             }
         }
     }
-    project.afterEvaluate {
-        if (project.plugins.hasPlugin("com.android.library")) {
-            project.android {
-                compileSdkVersion 34
+    if (project.name != 'app' && !project.state.executed) {
+        project.afterEvaluate {
+            if (project.plugins.hasPlugin("com.android.library")) {
+                project.android {
+                    compileSdkVersion 34
+                    buildToolsVersion "34.0.0"
+                }
             }
         }
     }
