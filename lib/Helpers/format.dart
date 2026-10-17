@@ -30,16 +30,21 @@ import 'package:logging/logging.dart';
 // ignore: avoid_classes_with_only_static_members
 class FormatResponse {
   static String decode(String input) {
-    const String key = '38346591';
-    final DES desECB = DES(key: key.codeUnits);
+    try {
+      const String key = '38346591';
+      final DES desECB = DES(key: key.codeUnits);
 
-    final Uint8List encrypted = base64.decode(input);
-    final List<int> decrypted = desECB.decrypt(encrypted);
-    final String decoded = utf8
-        .decode(decrypted)
-        .replaceAll(RegExp(r'\.mp4.*'), '.mp4')
-        .replaceAll(RegExp(r'\.m4a.*'), '.m4a');
-    return decoded.replaceAll('http:', 'https:');
+      final Uint8List encrypted = base64.decode(input);
+      final List<int> decrypted = desECB.decrypt(encrypted);
+      final String decoded = utf8
+          .decode(decrypted)
+          .replaceAll(RegExp(r'\.mp4.*'), '.mp4')
+          .replaceAll(RegExp(r'\.m4a.*'), '.m4a');
+      return decoded.replaceAll('http:', 'https:');
+    } catch (e) {
+      Logger.root.warning('Failed to DES decode media URL: $e');
+      return '';
+    }
   }
 
   static Future<List> formatSongsResponse(

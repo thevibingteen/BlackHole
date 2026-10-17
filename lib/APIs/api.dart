@@ -141,13 +141,13 @@ class SaavnAPI {
       try {
         final res = await getResponse(params);
         if (res.statusCode == 200) {
-          final Map getMain = json.decode(res.body) as Map;
+          final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
           final String count = getMain['list_count'].toString();
           final String params2 =
               "token=$token&type=$type&n=$count&p=$p&${endpoints['fromToken']}";
           final res2 = await getResponse(params2);
           if (res2.statusCode == 200) {
-            final Map getMain2 = json.decode(res2.body) as Map;
+            final Map getMain2 = json.decode(utf8.decode(res2.bodyBytes)) as Map;
             if (type == 'album' || type == 'playlist') return getMain2;
             final List responseList = getMain2['songs'] as List;
             return {
@@ -167,7 +167,7 @@ class SaavnAPI {
       try {
         final res = await getResponse(params);
         if (res.statusCode == 200) {
-          final Map getMain = json.decode(res.body) as Map;
+          final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
           if (getMain['status'] == 'failure') {
             Logger.root.severe('Error in getSongFromToken response: $getMain');
             return {'songs': List.empty()};
@@ -207,7 +207,7 @@ class SaavnAPI {
     final String params = "${endpoints['getReco']}&pid=$pid";
     final res = await getResponse(params);
     if (res.statusCode == 200 && res.body.isNotEmpty) {
-      final List getMain = json.decode(res.body) as List;
+      final List getMain = json.decode(utf8.decode(res.bodyBytes)) as List;
       return FormatResponse.formatSongsResponse(getMain, 'song');
     } else {
       Logger.root.severe(
@@ -238,7 +238,7 @@ class SaavnAPI {
 
     final res = await getResponse(params!);
     if (res.statusCode == 200) {
-      final Map getMain = json.decode(res.body) as Map;
+      final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
       return getMain['stationid']?.toString();
     }
     return null;
@@ -254,7 +254,7 @@ class SaavnAPI {
           "stationid=$stationId&k=$count&next=$next&${endpoints['radioSongs']}";
       final res = await getResponse(params);
       if (res.statusCode == 200) {
-        final Map getMain = json.decode(res.body) as Map;
+        final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
         final List responseList = [];
         for (int i = 0; i < count; i++) {
           responseList.add(getMain[i.toString()]['song']);
@@ -270,7 +270,7 @@ class SaavnAPI {
     try {
       final res = await getResponse(endpoints['topSearches']!, useProxy: true);
       if (res.statusCode == 200) {
-        final List getMain = json.decode(res.body) as List;
+        final List getMain = json.decode(utf8.decode(res.bodyBytes)) as List;
         return getMain.map((element) {
           return element['title'].toString();
         }).toList();
@@ -292,7 +292,7 @@ class SaavnAPI {
     try {
       final res = await getResponse(params, useProxy: true);
       if (res.statusCode == 200) {
-        final dynamic decoded = json.decode(res.body);
+        final dynamic decoded = json.decode(utf8.decode(res.bodyBytes));
         if (decoded is Map) {
           final List responseList = (decoded['results'] as List?) ?? [];
           return {
@@ -329,7 +329,7 @@ class SaavnAPI {
     try {
       final res = await getResponse(params, usev4: false, useProxy: true);
       if (res.statusCode == 200) {
-        final dynamic decoded = json.decode(res.body);
+        final dynamic decoded = json.decode(utf8.decode(res.bodyBytes));
         if (decoded is Map) {
           final Map getMain = decoded;
 
@@ -446,7 +446,7 @@ class SaavnAPI {
 
     final res = await getResponse(params!);
     if (res.statusCode == 200) {
-      final getMain = json.decode(res.body);
+      final getMain = json.decode(utf8.decode(res.bodyBytes));
       final List responseList = getMain['results'] as List;
       return FormatResponse.formatAlbumResponse(responseList, type);
     }
@@ -458,7 +458,7 @@ class SaavnAPI {
     try {
       final res = await getResponse(params);
       if (res.statusCode == 200) {
-        final getMain = json.decode(res.body);
+        final getMain = json.decode(utf8.decode(res.bodyBytes));
         if (getMain['list'] != '') {
           final List responseList = getMain['list'] as List;
           return {
@@ -492,7 +492,7 @@ class SaavnAPI {
         '${endpoints["fromToken"]}&type=artist&p=&n_song=50&n_album=50&sub_type=&category=$category&sort_order=$sortOrder&includeMetaTags=0&token=$artistToken';
     final res = await getResponse(params);
     if (res.statusCode == 200) {
-      final getMain = json.decode(res.body) as Map;
+      final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
       final List topSongsResponseList = getMain['topSongs'] as List;
       final List latestReleaseResponseList = getMain['latest_release'] as List;
       final List topAlbumsResponseList = getMain['topAlbums'] as List;
@@ -578,7 +578,7 @@ class SaavnAPI {
     try {
       final res = await getResponse(params);
       if (res.statusCode == 200) {
-        final getMain = json.decode(res.body);
+        final getMain = json.decode(utf8.decode(res.bodyBytes));
         if (getMain['list'] != '') {
           final List responseList = getMain['list'] as List;
           return {
@@ -612,7 +612,7 @@ class SaavnAPI {
     final String params = 'p=1&q=$searchQuery&n=10&${endpoints["getResults"]}';
     final res = await getResponse(params, useProxy: true);
     if (res.statusCode == 200) {
-      final getMain = json.decode(res.body);
+      final getMain = json.decode(utf8.decode(res.bodyBytes));
       final List responseList = getMain['results'] as List;
       return [
         await FormatResponse.formatSingleSongResponse(responseList[0] as Map)
@@ -626,7 +626,7 @@ class SaavnAPI {
     try {
       final res = await getResponse(params);
       if (res.statusCode == 200) {
-        final dynamic decoded = json.decode(res.body);
+        final dynamic decoded = json.decode(utf8.decode(res.bodyBytes));
         if (decoded is Map) {
           final List songs = (decoded['songs'] as List?) ?? [];
           if (songs.isNotEmpty && songs[0] is Map) {

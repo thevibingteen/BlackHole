@@ -382,9 +382,13 @@ class Download with ChangeNotifier {
       }
     } else {
       Logger.root.info('Fetching jiosaavn download url with preferred quality');
+      final String quality =
+          (preferredDownloadQuality == '320 kbps' && data['320kbps'] != true)
+              ? '160'
+              : preferredDownloadQuality.replaceAll(' kbps', '');
       kUrl = kUrl.replaceAll(
-        '_96.',
-        "_${preferredDownloadQuality.replaceAll(' kbps', '')}.",
+        RegExp(r'_(48|96|160|320)\.'),
+        '_$quality.',
       );
     }
 

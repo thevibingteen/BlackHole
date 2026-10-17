@@ -531,4 +531,65 @@ void main() {
       expect(emptyResult, isEmpty);
     });
   });
+
+  group('JioSaavn DES Decryption & Song Formatting Tests', () {
+    test('FormatResponse.decode gracefully handles malformed or non-base64 strings', () {
+      expect(FormatResponse.decode('not_valid_base64!!!'), equals(''));
+      expect(FormatResponse.decode(''), equals(''));
+      expect(FormatResponse.decode('===invalid==='), equals(''));
+    });
+
+    test('formatSingleSongResponse falls back through artist hierarchy gracefully', () async {
+      // 1. subtitle fallback
+      final songWithSubtitle = {
+        'id': 'sub_1',
+        'song': 'Test Song',
+        'subtitle': 'Subtitle Artist',
+        'more_info': <String, dynamic>{},
+      };
+      final res1 = await FormatResponse.formatSingleSongResponse(songWithSubtitle);
+      expect(res1['artist'], equals('Subtitle Artist'));
+
+      // 2. Unknown fallback
+      final songWithNoArtist = {
+        'id': 'unk_1',
+        'song': 'Anonymous Song',
+        'more_info': <String, dynamic>{},
+      };
+      final res2 = await FormatResponse.formatSingleSongResponse(songWithNoArtist);
+      expect(res2['artist'], equals('Unknown'));
+    });
+  });
+
+  group('Download Quality & Bitrate Replacement Tests', () {
+    String resolveDownloadUrl(String rawUrl, String preferredQuality, bool has320) {
+      final String quality =
+          (preferredQuality == '320 kbps' && !has320)
+              ? '160'
+              : preferredQuality.replaceAll(' kbps', '');
+      return rawUrl.replaceAll(
+        RegExp(r'_(48|96|160|320)\.'),
+        '_$quality.',
+      );
+    }
+
+    test('replaces bitrate correctly when 320 kbps is available', () {
+      const originalUrl = 'https://aac.saavncdn.com/123/sample_96.mp4';
+      final resolved = resolveDownloadUrl(originalUrl, '320 kbps', true);
+      expect(resolved, equals('https://aac.saavncdn.com/123/sample_320.mp4'));
+    });
+
+    test('falls back to 160 kbps when user selects 320 kbps but song lacks 320kbps', () {
+      const originalUrl = 'https://aac.saavncdn.com/123/sample_96.mp4';
+      final resolved = resolveDownloadUrl(originalUrl, '320 kbps', false);
+      expect(resolved, equals('https://aac.saavncdn.com/123/sample_160.mp4'));
+    });
+
+    test('replaces higher bitrate with user preferred 96 kbps', () {
+      const originalUrl = 'https://aac.saavncdn.com/123/sample_320.mp4';
+      final resolved = resolveDownloadUrl(originalUrl, '96 kbps', true);
+      expect(resolved, equals('https://aac.saavncdn.com/123/sample_96.mp4'));
+    });
+  });
 }
+
