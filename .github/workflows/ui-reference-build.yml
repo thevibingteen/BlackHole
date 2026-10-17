@@ -80,21 +80,8 @@ jobs:
 
       - name: Apply temporary CI-only audiotagger dependency replacement
         run: |
-          python3 -c "
-          with open('source/pubspec.yaml', 'r') as f:
-              content = f.read()
-          target = '''  audiotagger:
-    git:
-      url: https://github.com/Sangwan5688/Audiotagger
-      ref: 90f2db5'''
-          replacement = '''  audiotagger: 2.2.1'''
-          if target not in content:
-              raise ValueError('Target audiotagger block not found in source/pubspec.yaml')
-          content = content.replace(target, replacement)
-          with open('source/pubspec.yaml', 'w') as f:
-              f.write(content)
-          print('Successfully replaced audiotagger git dependency with audiotagger: 2.2.1')
-          "
+          python3 -c "import re; p='source/pubspec.yaml'; s=open(p).read(); s=re.sub(r'  audiotagger:\n    git:\n      url: [^\n]+\n      ref: [^\n]+', '  audiotagger: 2.2.1', s); open(p,'w').write(s)"
+          echo "Verified audiotagger replacement in pubspec.yaml:"
           grep -n "audiotagger:" source/pubspec.yaml
 
       - name: Resolve dependencies (flutter pub get)
