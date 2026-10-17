@@ -57,15 +57,11 @@ class SaavnAPI {
     bool usev4 = true,
     bool useProxy = false,
   }) async {
-    Uri url;
-    if (!usev4) {
-      url = Uri.https(
-        baseUrl,
-        '$apiStr&$params'.replaceAll('&api_version=4', ''),
-      );
-    } else {
-      url = Uri.https(baseUrl, '$apiStr&$params');
-    }
+    final String query = usev4
+        ? '$apiStr&$params'
+        : '$apiStr&$params'.replaceAll('&api_version=4', '');
+    final Uri url = Uri.parse('https://$baseUrl$query');
+
     preferredLanguages =
         preferredLanguages.map((lang) => lang.toLowerCase()).toList();
     final String languageHeader = 'L=${preferredLanguages.join('%2C')}';
@@ -76,9 +72,10 @@ class SaavnAPI {
       final String proxyIP = settingsBox.get('proxyIp').toString();
       final proxyHeaders = headers;
       proxyHeaders['X-FORWARDED-FOR'] = proxyIP;
-      return get(url, headers: proxyHeaders)
+      final res = await get(url, headers: proxyHeaders)
           .timeout(timeoutDuration)
           .onError((error, stackTrace) {
+        Logger.root.severe('Proxy network error fetching $url: $error');
         return Response(
           jsonEncode({
             'status': 'failure',
@@ -87,10 +84,17 @@ class SaavnAPI {
           404,
         );
       });
+      if (res.statusCode != 200) {
+        Logger.root.warning(
+          'JioSaavn proxy request to $url returned HTTP ${res.statusCode}',
+        );
+      }
+      return res;
     }
-    return get(url, headers: headers)
+    final res = await get(url, headers: headers)
         .timeout(timeoutDuration)
         .onError((error, stackTrace) {
+      Logger.root.severe('Network error fetching $url: $error');
       return Response(
         jsonEncode({
           'status': 'failure',
@@ -99,6 +103,12 @@ class SaavnAPI {
         404,
       );
     });
+    if (res.statusCode != 200) {
+      Logger.root.warning(
+        'JioSaavn request to $url returned HTTP ${res.statusCode}',
+      );
+    }
+    return res;
   }
 
   Future<Map> fetchHomePageData() async {
@@ -106,8 +116,12 @@ class SaavnAPI {
     try {
       final res = await getResponse(endpoints['homeData']!);
       if (res.statusCode == 200) {
-        final Map data = json.decode(res.body) as Map;
+        final Map data = json.decode(utf8.decode(res.bodyBytes)) as Map;
         result = await FormatResponse.formatHomePageData(data);
+      } else {
+        Logger.root.warning(
+          'fetchHomePageData returned HTTP ${res.statusCode}',
+        );
       }
     } catch (e) {
       Logger.root.severe('Error in fetchHomePageData: $e');

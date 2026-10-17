@@ -126,27 +126,50 @@ class YtMusicService {
   Future<Map> sendRequest(
     String endpoint,
     Map body,
-    Map<String, String>? headers,
-  ) async {
+    Map<String, String>? headers, {
+    int retries = 1,
+  }) async {
     final Uri uri = Uri.https(ytmDomain, baseApiEndpoint + endpoint, ytmParams);
-    try {
-      final response = await post(
-        uri,
-        headers: headers,
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 15));
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map;
-      } else {
-        Logger.root
-            .severe('YtMusic returned ${response.statusCode}', response.body);
-        Logger.root.info('Requested endpoint: $uri');
+    for (int attempt = 0; attempt <= retries; attempt++) {
+      try {
+        final response = await post(
+          uri,
+          headers: headers,
+          body: jsonEncode(body),
+        ).timeout(const Duration(seconds: 15));
+
+        if (response.statusCode == 200) {
+          final decoded = json.decode(utf8.decode(response.bodyBytes));
+          if (decoded is Map) {
+            return decoded;
+          }
+          Logger.root.warning('YtMusic decoded response is not a Map: $endpoint');
+          return {};
+        } else if (response.statusCode >= 500 && attempt < retries) {
+          Logger.root.warning(
+            'YtMusic returned retryable status ${response.statusCode} on attempt $attempt, retrying...',
+          );
+          await Future.delayed(const Duration(milliseconds: 600));
+          continue;
+        } else {
+          Logger.root.severe(
+            'YtMusic returned HTTP ${response.statusCode} for $endpoint: ${response.body}',
+          );
+          return {};
+        }
+      } catch (e) {
+        if (attempt < retries) {
+          Logger.root.warning(
+            'Transient error in sendRequest for $endpoint (attempt $attempt), retrying: $e',
+          );
+          await Future.delayed(const Duration(milliseconds: 600));
+          continue;
+        }
+        Logger.root.severe('Error in sendRequest for $endpoint: $e');
         return {};
       }
-    } catch (e) {
-      Logger.root.severe('Error in sendRequest for $endpoint: $e');
-      return {};
     }
+    return {};
   }
 
   String? getParam2(String filter) {
@@ -644,43 +667,68 @@ class YtMusicService {
       body['video_id'] = videoId;
       final Map response =
           await sendRequest(endpoints['get_song']!, body, headers);
+      if (response.isEmpty) return {};
+
       int maxBitrate = 0;
-      String? url;
-      final formats = await nav(response, ['streamingData', 'formats']) as List;
-      for (final element in formats) {
-        if (element['bitrate'] != null) {
-          if (int.parse(element['bitrate'].toString()) > maxBitrate) {
-            maxBitrate = int.parse(element['bitrate'].toString());
-            url = element['signatureCipher'].toString();
+      String? cipherUrl;
+      String? directUrl;
+
+      final dynamic formatsData =
+          await nav(response, ['streamingData', 'formats']);
+      if (formatsData is List) {
+        for (final element in formatsData) {
+          if (element is Map && element['bitrate'] != null) {
+            final int bitrate =
+                int.tryParse(element['bitrate'].toString()) ?? 0;
+            if (bitrate > maxBitrate) {
+              maxBitrate = bitrate;
+              if (element['url'] != null) {
+                directUrl = element['url'].toString();
+              } else if (element['signatureCipher'] != null) {
+                cipherUrl = element['signatureCipher'].toString();
+              }
+            }
           }
         }
       }
-      // final adaptiveFormats =
-      //     await nav(response, ['streamingData', 'adaptiveFormats']) as List;
-      // for (final element in adaptiveFormats) {
-      //   if (element['bitrate'] != null) {
-      //     if (int.parse(element['bitrate'].toString()) > maxBitrate) {
-      //       maxBitrate = int.parse(element['bitrate'].toString());
-      //       url = element['signatureCipher'].toString();
-      //     }
-      //   }
-      // }
-      final videoDetails = await nav(response, ['videoDetails']) as Map;
-      final reg = RegExp('url=(.*)');
-      final matches = reg.firstMatch(url!);
-      final String result = matches!.group(1).toString().unescape();
+
+      String result = '';
+      if (directUrl != null && directUrl.isNotEmpty) {
+        result = directUrl;
+      } else if (cipherUrl != null && cipherUrl.isNotEmpty) {
+        final reg = RegExp(r'url=([^&]+)');
+        final matches = reg.firstMatch(cipherUrl);
+        if (matches != null && matches.group(1) != null) {
+          result = Uri.decodeComponent(matches.group(1)!);
+        }
+      }
+
+      final dynamic videoDetailsData = await nav(response, ['videoDetails']);
+      if (videoDetailsData is! Map) {
+        return {};
+      }
+      final Map videoDetails = videoDetailsData;
+
+      final List thumbs =
+          (videoDetails['thumbnail']?['thumbnails'] as List?) ?? [];
+      final String image =
+          thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+
       return {
-        'id': videoDetails['videoId'],
-        'title': videoDetails['title'],
-        'artist': videoDetails['author'],
-        'duration': videoDetails['lengthSeconds'],
+        'id': videoDetails['videoId']?.toString() ?? videoId,
+        'title': videoDetails['title']?.toString() ?? '',
+        'artist': videoDetails['author']?.toString() ?? '',
+        'duration': videoDetails['lengthSeconds']?.toString() ?? '0',
         'url': result,
-        'views': videoDetails['viewCount'],
-        'image': videoDetails['thumbnail']['thumbnails'].last['url'],
-        'images': videoDetails['thumbnail']['thumbnails'].map((e) => e['url']),
+        'views': videoDetails['viewCount']?.toString() ?? '0',
+        'image': image,
+        'images': thumbs
+            .map((e) => e is Map ? e['url'] : '')
+            .where((u) => u != '')
+            .toList(),
       };
     } catch (e) {
-      Logger.root.severe('Error in yt get song data', e);
+      Logger.root.severe('Error in yt get song data for $videoId', e);
       return {};
     }
   }

@@ -333,9 +333,9 @@ class SpotifyApi {
   ) async {
     try {
       final Uri path = Uri.parse(
-        '$spotifyApiBaseUrl$spotifyPlaylistTrackEndpoint/$playlistId/tracks?limit=100&offset=$offset',
+        '$spotifyApiBaseUrl$spotifyPlaylistTrackEndpoint/$playlistId/items?limit=100&offset=$offset',
       );
-      final response = await get(
+      var response = await get(
         path,
         headers: {
           'Authorization': 'Bearer $accessToken',
@@ -343,17 +343,47 @@ class SpotifyApi {
         },
       ).timeout(const Duration(seconds: 15));
 
+      if (response.statusCode == 404 || response.statusCode == 400) {
+        // Fallback to legacy /tracks endpoint
+        final Uri fallbackPath = Uri.parse(
+          '$spotifyApiBaseUrl$spotifyPlaylistTrackEndpoint/$playlistId/tracks?limit=100&offset=$offset',
+        );
+        response = await get(
+          fallbackPath,
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 15));
+      }
+
       if (response.statusCode == 200) {
-        final result = jsonDecode(response.body);
+        final result = jsonDecode(utf8.decode(response.bodyBytes));
         if (result is Map && result['items'] is List) {
-          final List tracks = result['items'] as List;
+          final List rawItems = result['items'] as List;
+          // Filter out items without track details (e.g. unavailable, podcasts)
+          final List tracks = rawItems.where((item) {
+            if (item is! Map) return false;
+            final track = item['track'] ?? item['item'];
+            if (track == null || track is! Map) return false;
+            if (track['name'] == null) return false;
+            final images = track['album']?['images'];
+            if (images is! List || images.isEmpty) return false;
+            return true;
+          }).map((item) {
+            // Normalize track key if using newer item property
+            final map = Map<String, dynamic>.from(item as Map);
+            if (map['track'] == null && map['item'] != null) {
+              map['track'] = map['item'];
+            }
+            return map;
+          }).toList();
           final int total = (result['total'] as int?) ?? tracks.length;
           return {'tracks': tracks, 'total': total};
         }
       } else {
         Logger.root.severe(
-          'Error in getHundredTracksOfPlaylist, returned: ${response.statusCode}',
-          response.body,
+          'Error in getHundredTracksOfPlaylist for $playlistId, returned HTTP ${response.statusCode}: ${response.body}',
         );
       }
     } catch (e) {

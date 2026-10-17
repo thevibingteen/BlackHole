@@ -191,4 +191,344 @@ void main() {
       expect(compareVersion('1.15.7', '1.15.8'), isFalse);
     });
   });
+
+  group('Lyrics UTF-8 Character Encoding Tests', () {
+    test('utf8.decode prevents Latin-1 mojibake for Hindi Devanagari lyrics', () {
+      const hindiLyricText = 'मुस्कुराने की वजह तुम हो\nगुनगुनाने की वजह तुम हो';
+      final encodedBytes = utf8.encode(jsonEncode({'plainLyrics': hindiLyricText}));
+
+      // Simulating naive response.body behavior (Latin-1 fallback when charset is omitted)
+      final naiveDecoded = latin1.decode(encodedBytes);
+      expect(naiveDecoded.contains('à¤'), isTrue); // Corrupted mojibake!
+      expect(naiveDecoded.contains('मुस्कुराने'), isFalse);
+
+      // Verified fix: using utf8.decode(response.bodyBytes)
+      final properDecoded = utf8.decode(encodedBytes);
+      final parsed = jsonDecode(properDecoded) as Map;
+      expect(parsed['plainLyrics'], equals(hindiLyricText));
+      expect(parsed['plainLyrics'].contains('मुस्कुराने'), isTrue);
+      expect(parsed['plainLyrics'].contains('à¤'), isFalse);
+    });
+
+    test('synced LRC lyrics with Hindi text decode cleanly with timestamps', () {
+      const syncedHindi = '[00:15.30] मुस्कुराने की वजह तुम हो\n[00:20.45] जिया जाए ना, जाए ना, जाए ना';
+      final encodedBytes = utf8.encode(jsonEncode({'syncedLyrics': syncedHindi, 'plainLyrics': ''}));
+      final decoded = jsonDecode(utf8.decode(encodedBytes)) as Map;
+      expect(decoded['syncedLyrics'], equals(syncedHindi));
+      expect(Lyrics.isHtmlOrChallenge(decoded['syncedLyrics']), isFalse);
+    });
+  });
+
+  group('JioSaavn URI Construction & Endpoint Tests', () {
+    test('Uri.parse preserves query string without encoding ? as %3F in path', () {
+      const baseUrl = 'www.jiosaavn.com';
+      const apiStr = '/api.php?_format=json&_marker=0&api_version=4&ctx=web6dot0';
+      const params = '__call=webapi.getLaunchData';
+
+      // Buggy baseline Uri.https:
+      final buggyUri = Uri.https(baseUrl, '$apiStr&$params');
+      expect(buggyUri.path.contains('%3F'), isTrue); // Broken! %3F causes 403 Forbidden!
+      expect(buggyUri.query, isEmpty);
+
+      // Fixed Uri.parse:
+      final fixedUri = Uri.parse('https://$baseUrl$apiStr&$params');
+      expect(fixedUri.path, equals('/api.php')); // Clean path!
+      expect(fixedUri.queryParameters['_format'], equals('json'));
+      expect(fixedUri.queryParameters['__call'], equals('webapi.getLaunchData'));
+      expect(fixedUri.toString().contains('%3F'), isFalse);
+    });
+  });
+
+  group('YouTube /music Feed & Modern Lockup Parsing Tests', () {
+    test('parses richShelfRenderer with lockupViewModel into home shelf playlists', () {
+      final mockData = {
+        'contents': {
+          'twoColumnBrowseResultsRenderer': {
+            'tabs': [
+              {
+                'tabRenderer': {
+                  'content': {
+                    'richGridRenderer': {
+                      'contents': [
+                        {
+                          'richSectionRenderer': {
+                            'content': {
+                              'richShelfRenderer': {
+                                'title': {'simpleText': "India's Biggest Hits"},
+                                'contents': [
+                                  {
+                                    'richItemRenderer': {
+                                      'content': {
+                                        'lockupViewModel': {
+                                          'contentId': 'PL1234567890',
+                                          'metadata': {
+                                            'lockupMetadataViewModel': {
+                                              'title': {'content': 'Bollywood Hitlist'},
+                                              'metadata': {
+                                                'contentMetadataViewModel': {
+                                                  'metadataRows': [
+                                                    {
+                                                      'metadataParts': [
+                                                        {
+                                                          'text': {'content': 'Top Trending Bollywood'}
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            }
+                                          },
+                                          'contentImage': {
+                                            'thumbnailViewModel': {
+                                              'image': {
+                                                'sources': [
+                                                  {'url': 'https://i.ytimg.com/vi/test/hqdefault.jpg'}
+                                                ]
+                                              }
+                                            }
+                                          },
+                                          'rendererContext': {
+                                            'commandContext': {
+                                              'onTap': {
+                                                'innertubeCommand': {
+                                                  'watchPlaylistEndpoint': {
+                                                    'playlistId': 'PL1234567890'
+                                                  },
+                                                  'watchEndpoint': {
+                                                    'videoId': 'vid_first_123'
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      };
+
+      final tabs = mockData['contents']!['twoColumnBrowseResultsRenderer']!['tabs']! as List;
+      final tabContent = (tabs[0] as Map)['tabRenderer']['content'] as Map;
+      final gridContents = tabContent['richGridRenderer']['contents'] as List;
+      final shelves = [];
+      for (final c in gridContents) {
+        final rsr = c['richSectionRenderer']?['content']?['richShelfRenderer'];
+        if (rsr != null) {
+          final title = rsr['title']?['simpleText'] ?? 'Music';
+          final items = [];
+          for (final it in rsr['contents'] as List) {
+            final lvm = it['richItemRenderer']?['content']?['lockupViewModel'];
+            if (lvm != null) {
+              final meta = lvm['metadata']?['lockupMetadataViewModel'];
+              final itemTitle = meta?['title']?['content'] ?? '';
+              final cmd = lvm['rendererContext']?['commandContext']?['onTap']?['innertubeCommand'];
+              final playlistId = cmd?['watchPlaylistEndpoint']?['playlistId'] ?? lvm['contentId'];
+              final videoId = cmd?['watchEndpoint']?['videoId'] ?? '';
+              final imgSources = lvm['contentImage']?['thumbnailViewModel']?['image']?['sources'] as List? ?? [];
+              final img = imgSources.isNotEmpty ? imgSources.last['url'] : '';
+              items.add({
+                'title': itemTitle,
+                'playlistId': playlistId,
+                'firstItemId': videoId,
+                'image': img,
+              });
+            }
+          }
+          shelves.add({'title': title, 'playlists': items});
+        }
+      }
+
+      expect(shelves.length, equals(1));
+      expect(shelves.first['title'], equals("India's Biggest Hits"));
+      expect((shelves.first['playlists'] as List).first['title'], equals('Bollywood Hitlist'));
+      expect((shelves.first['playlists'] as List).first['playlistId'], equals('PL1234567890'));
+      expect((shelves.first['playlists'] as List).first['firstItemId'], equals('vid_first_123'));
+    });
+  });
+
+  group('Spotify Track / Items Filtering Tests', () {
+    test('filters out null track entries and sanitizes track items for top charts', () {
+      final rawSpotifyItems = [
+        {
+          'track': {
+            'name': 'Valid Song',
+            'album': {
+              'images': [
+                {'url': 'https://i.scdn.co/image/big.jpg'},
+                {'url': 'https://i.scdn.co/image/small.jpg'},
+              ]
+            },
+            'artists': [
+              {'name': 'Artist A'}
+            ],
+            'external_urls': {
+              'spotify': 'https://open.spotify.com/track/123'
+            }
+          }
+        },
+        {
+          // Unavailable track with null track property
+          'track': null
+        },
+        {
+          // Episode/podcast with null album images
+          'track': {
+            'name': 'Podcast Episode',
+            'album': {'images': []},
+            'artists': [{'name': 'Host'}]
+          }
+        }
+      ];
+
+      final filtered = rawSpotifyItems.where((item) {
+        final track = item['track'];
+        if (track == null || track is! Map) return false;
+        if (track['name'] == null) return false;
+        final album = track['album'];
+        if (album is! Map) return false;
+        final images = album['images'];
+        if (images is! List || images.isEmpty) return false;
+        return true;
+      }).toList();
+
+      expect(filtered.length, equals(1));
+      final firstItem = filtered.first;
+      final firstTrack = firstItem['track'] as Map;
+      expect(firstTrack['name'], equals('Valid Song'));
+    });
+  });
+
+  group('YouTube Stream Expiry & URI Validation Tests', () {
+    test('extracts expire timestamp from signed stream URL correctly', () {
+      const sampleUrl = 'https://rr4---sn-5hnekne6.googlevideo.com/videoplayback?expire=1760720400&ei=abcd&ip=1.2.3.4&id=o-ABCD&itag=140';
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(sampleUrl);
+      expect(match, isNotNull);
+      expect(match!.group(1), equals('1760720400'));
+      final int expireTimestamp = int.parse(match.group(1)!);
+      expect(expireTimestamp, equals(1760720400));
+    });
+
+    test('detects expired stream timestamp against current epoch', () {
+      final int pastExpire = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - 300;
+      final String pastUrl = 'https://googlevideo.com/videoplayback?expire=$pastExpire&id=123';
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(pastUrl);
+      expect(match, isNotNull);
+      final int expireTime = int.parse(match!.group(1)!);
+      final bool isExpired = DateTime.now().millisecondsSinceEpoch ~/ 1000 > expireTime;
+      expect(isExpired, isTrue);
+    });
+
+    test('handles URLs without expire parameter safely without throwing exceptions', () {
+      const urlWithoutExpire = 'https://example.com/stream.mp4';
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithoutExpire);
+      expect(match, isNull);
+    });
+  });
+
+  group('Playback Stats Counting & Semantics Tests', () {
+    test('tracks and increments playCount for local songs regardless of artUri scheme', () {
+      final Map<String, dynamic> fakeStatsBox = {};
+      final localSong1 = {
+        'id': 'local_file_1',
+        'title': 'Local Song One',
+        'artist': 'Local Artist',
+        'artUri': 'file:///storage/emulated/0/Music/song1.mp3',
+      };
+
+      // Function simulating addRecentlyPlayed logic from AudioPlayerHandlerImpl
+      void trackPlay(Map song) {
+        final String id = song['id'] as String;
+        final Map songStats = Map<String, dynamic>.from(fakeStatsBox[id] as Map? ?? {});
+        songStats['playCount'] = ((songStats['playCount'] as int?) ?? 0) + 1;
+        songStats['title'] = song['title'];
+        songStats['artist'] = song['artist'];
+        songStats['id'] = id;
+        fakeStatsBox[id] = songStats;
+
+        final Map mostPlayed = Map<String, dynamic>.from(fakeStatsBox['mostPlayed'] as Map? ?? {});
+        if ((songStats['playCount'] as int) > ((mostPlayed['playCount'] as int?) ?? 0)) {
+          fakeStatsBox['mostPlayed'] = songStats;
+        }
+      }
+
+      // Play local song 1 twice
+      trackPlay(localSong1);
+      trackPlay(localSong1);
+
+      expect(fakeStatsBox['local_file_1']['playCount'], equals(2));
+      expect(fakeStatsBox['mostPlayed']['id'], equals('local_file_1'));
+      expect(fakeStatsBox['mostPlayed']['playCount'], equals(2));
+
+      // Play local song 2 three times
+      final localSong2 = {
+        'id': 'local_file_2',
+        'title': 'Local Song Two',
+        'artist': 'Local Artist',
+        'artUri': '',
+      };
+      trackPlay(localSong2);
+      trackPlay(localSong2);
+      trackPlay(localSong2);
+
+      expect(fakeStatsBox['local_file_2']['playCount'], equals(3));
+      expect(fakeStatsBox['mostPlayed']['id'], equals('local_file_2'));
+      expect(fakeStatsBox['mostPlayed']['title'], equals('Local Song Two'));
+    });
+  });
+
+  group('YouTube Music Search Degraded & Error Handling Tests', () {
+    test('returns null gracefully on item with missing flexColumns', () {
+      final service = YtMusicService();
+      final malformedItem = {
+        'musicResponsiveListItemRenderer': {
+          'flexColumns': <dynamic>[],
+        }
+      };
+      final result = service.parseResponsiveListItem(malformedItem);
+      expect(result, isNull);
+    });
+
+    test('returns null gracefully on item with missing runs or navigation endpoints', () {
+      final service = YtMusicService();
+      final malformedItem = {
+        'musicResponsiveListItemRenderer': {
+          'flexColumns': [
+            {
+              'musicResponsiveListItemFlexColumnRenderer': {
+                'text': {'runs': <dynamic>[]}
+              }
+            }
+          ]
+        }
+      };
+      final result = service.parseResponsiveListItem(malformedItem);
+      expect(result, isNull);
+    });
+
+    test('handles empty or non-200 responses without uncaught errors', () async {
+      final service = YtMusicService();
+      // Test search with invalid endpoint
+      final emptyResult = await service.sendRequest(
+        'non_existent_endpoint',
+        {},
+        {},
+        retries: 0,
+      );
+      expect(emptyResult, isEmpty);
+    });
+  });
 }

@@ -198,12 +198,14 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
         }
       }
 
-      if (item.artUri.toString().startsWith('http')) {
-        addRecentlyPlayed(item);
-        _recentSubject.add([item]);
+      addRecentlyPlayed(item);
+      _recentSubject.add([item]);
 
-        if (recommend && item.extras!['autoplay'] as bool) {
-          final List<MediaItem> mediaQueue = queue.value;
+      if (recommend &&
+          item.artUri != null &&
+          item.artUri.toString().startsWith('http') &&
+          (item.extras?['autoplay'] as bool? ?? false)) {
+        final List<MediaItem> mediaQueue = queue.value;
           final int index = mediaQueue.indexOf(item);
           final int queueLength = mediaQueue.length;
           if (queueLength - index < 5) {
@@ -578,7 +580,13 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   }
 
   Future<void> addRecentlyPlayed(MediaItem mediaitem) async {
-    Logger.root.info('adding ${mediaitem.id} to recently played');
+    Logger.root.info('adding ${mediaitem.id} to recently played and stats');
+    if (!Hive.isBoxOpen('stats')) {
+      await Hive.openBox('stats');
+    }
+    if (!Hive.isBoxOpen('cache')) {
+      await Hive.openBox('cache');
+    }
     List recentList = await Hive.box('cache')
         .get('recentSongs', defaultValue: [])?.toList() as List;
 
@@ -596,12 +604,12 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     songStats['artist'] = mediaitem.artist;
     songStats['album'] = mediaitem.album;
     songStats['id'] = mediaitem.id;
-    Hive.box('stats').put(mediaitem.id, songStats);
+    await Hive.box('stats').put(mediaitem.id, songStats);
     if ((songStats['playCount'] as int) >
         (mostPlayed['playCount'] as int? ?? 0)) {
-      Hive.box('stats').put('mostPlayed', songStats);
+      await Hive.box('stats').put('mostPlayed', songStats);
     }
-    Logger.root.info('adding ${mediaitem.id} data to stats');
+    Logger.root.info('adding ${mediaitem.id} data to stats, playCount=${songStats['playCount']}');
 
     final Map item = MediaItemConverter.mediaItemToMap(mediaitem);
     recentList.insert(0, item);
@@ -613,7 +621,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     if (recentList.length > 30) {
       recentList = recentList.sublist(0, 30);
     }
-    Hive.box('cache').put('recentSongs', recentList);
+    await Hive.box('cache').put('recentSongs', recentList);
   }
 
   Future<void> addLastQueue(List<MediaItem> queue) async {

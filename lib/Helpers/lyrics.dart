@@ -179,7 +179,7 @@ class Lyrics {
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
-        final data = json.decode(res.body);
+        final data = json.decode(utf8.decode(res.bodyBytes));
         if (data is Map) {
           final synced = data['syncedLyrics']?.toString() ?? '';
           final plain = data['plainLyrics']?.toString() ?? '';
@@ -212,7 +212,7 @@ class Lyrics {
       ).timeout(const Duration(seconds: 10));
 
       if (searchRes.statusCode == 200) {
-        final list = json.decode(searchRes.body);
+        final list = json.decode(utf8.decode(searchRes.bodyBytes));
         if (list is List && list.isNotEmpty) {
           for (final item in list) {
             if (item is Map) {
@@ -240,9 +240,8 @@ class Lyrics {
 
   static Future<String> getSaavnLyrics(String id) async {
     try {
-      final Uri lyricsUrl = Uri.https(
-        'www.jiosaavn.com',
-        '/api.php?__call=lyrics.getLyrics&lyrics_id=$id&ctx=web6dot0&api_version=4&_format=json',
+      final Uri lyricsUrl = Uri.parse(
+        'https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&lyrics_id=$id&ctx=web6dot0&api_version=4&_format=json',
       );
       final Response res = await get(
         lyricsUrl,
@@ -250,7 +249,7 @@ class Lyrics {
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode != 200) return '';
-      final List<String> rawLyrics = res.body.split('-->');
+      final List<String> rawLyrics = utf8.decode(res.bodyBytes).split('-->');
       Map fetchedLyrics = {};
       if (rawLyrics.length > 1) {
         fetchedLyrics = json.decode(rawLyrics[1]) as Map;
@@ -347,7 +346,7 @@ class Lyrics {
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode == 200) {
-        final Map lyricsData = json.decode(res.body) as Map;
+        final Map lyricsData = json.decode(utf8.decode(res.bodyBytes)) as Map;
         if (lyricsData['error'] == false) {
           final List lines = lyricsData['lines'] as List;
           if (lyricsData['syncType'] == 'LINE_SYNCED') {
@@ -464,7 +463,7 @@ class Lyrics {
     final List<String?> lyrics = RegExp(
       r'<span class=\"lyrics__content__ok\">(.*?)<\/span>',
       dotAll: true,
-    ).allMatches(res.body).map((m) => m[1]).toList();
+    ).allMatches(utf8.decode(res.bodyBytes)).map((m) => m[1]).toList();
 
     final result = lyrics.isEmpty ? '' : lyrics.join('\n');
     if (isHtmlOrChallenge(result)) return '';
