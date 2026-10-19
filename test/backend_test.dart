@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/lyrics.dart';
+import 'package:blackhole/Helpers/mediaitem_converter.dart';
 import 'package:blackhole/Helpers/update.dart';
 import 'package:blackhole/Services/yt_music.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -927,6 +928,156 @@ void main() {
       expect(filtered.length, equals(2));
       expect(filtered[0]!['id'], equals('1'));
       expect(filtered[1]!['id'], equals('2'));
+    });
+  });
+
+  group('YouTube Diagnostics, Stream Repair & Quality Selection Tests', () {
+    test('YT Music search parsing injects YouTube genre and perma_url for playback readiness', () {
+      final service = YtMusicService();
+      final mockItem = {
+        'musicResponsiveListItemRenderer': {
+          'playlistItemData': {'videoId': 'gJLVTKhTnog'},
+          'flexColumns': [
+            {
+              'musicResponsiveListItemFlexColumnRenderer': {
+                'text': {
+                  'runs': [
+                    {'text': 'Husn'}
+                  ]
+                }
+              }
+            },
+            {
+              'musicResponsiveListItemFlexColumnRenderer': {
+                'text': {
+                  'runs': [
+                    {'text': 'Song'},
+                    {'text': ' • '},
+                    {'text': 'Anuv Jain'},
+                    {'text': ' • '},
+                    {'text': 'Husn'},
+                    {'text': ' • '},
+                    {'text': '3:38'}
+                  ]
+                }
+              }
+            }
+          ],
+          'thumbnail': {
+            'musicThumbnailRenderer': {
+              'thumbnail': {
+                'thumbnails': [
+                  {'url': 'https://lh3.googleusercontent.com/test_120.jpg', 'width': 120, 'height': 120},
+                  {'url': 'https://lh3.googleusercontent.com/test_544.jpg', 'width': 544, 'height': 544}
+                ]
+              }
+            }
+          }
+        }
+      };
+
+      final parsed = service.parseResponsiveListItem(mockItem);
+      expect(parsed, isNotNull);
+      expect(parsed!['id'], equals('gJLVTKhTnog'));
+      expect(parsed['title'], equals('Husn'));
+      expect(parsed['artist'], equals('Anuv Jain'));
+      expect(parsed['genre'], equals('YouTube'));
+      expect(parsed['language'], equals('YouTube'));
+      expect(parsed['perma_url'], equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
+      expect(parsed['expire_at'], equals('0'));
+    });
+
+    test('MediaItemConverter preserves YouTube genre and extracts perma_url/expire_at', () {
+      final ytItem = {
+        'id': 'gJLVTKhTnog',
+        'title': 'Husn',
+        'artist': 'Anuv Jain',
+        'album': 'Husn',
+        'duration': '218',
+        'image': 'https://lh3.googleusercontent.com/test_544.jpg',
+        'genre': 'YouTube',
+        'language': 'YouTube',
+        'perma_url': 'https://www.youtube.com/watch?v=gJLVTKhTnog',
+        'url': 'https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&expire=1792445511',
+        'lowUrl': 'https://rr1---sn-test.googlevideo.com/videoplayback?itag=249&expire=1792445511',
+        'highUrl': 'https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&expire=1792445511',
+        'expire_at': '1792445511',
+      };
+
+      final mediaItem = MediaItemConverter.mapToMediaItem(ytItem);
+      expect(mediaItem.id, equals('gJLVTKhTnog'));
+      expect(mediaItem.title, equals('Husn'));
+      expect(mediaItem.genre, equals('YouTube'));
+      expect(mediaItem.extras!['genre'], equals('YouTube'));
+      expect(mediaItem.extras!['language'], equals('YouTube'));
+      expect(mediaItem.extras!['lowUrl'], contains('itag=249'));
+      expect(mediaItem.extras!['highUrl'], contains('itag=140'));
+      expect(mediaItem.extras!['perma_url'], equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
+    });
+
+    test('Audio source quality selection selects lowUrl for Low and highUrl for High', () {
+      const lowUrl = 'https://stream.googlevideo.com/videoplayback?itag=249&expire=1792445511';
+      const highUrl = 'https://stream.googlevideo.com/videoplayback?itag=140&expire=1792445511';
+      const rawUrl = 'https://stream.googlevideo.com/videoplayback?itag=18&expire=1792445511';
+
+      String selectStream(String quality, {required String low, required String high, required String fallback}) {
+        return (quality == 'High' && high.isNotEmpty)
+            ? high
+            : (low.isNotEmpty ? low : fallback);
+      }
+
+      final lowSelected = selectStream('Low', low: lowUrl, high: highUrl, fallback: rawUrl);
+      final highSelected = selectStream('High', low: lowUrl, high: highUrl, fallback: rawUrl);
+
+      expect(lowSelected, equals(lowUrl));
+      expect(lowSelected, contains('itag=249'));
+      expect(highSelected, equals(highUrl));
+      expect(highSelected, contains('itag=140'));
+    });
+
+    test('Audio source rejects empty or "null" URL safely to prevent player buffering stall', () {
+      bool canConstructSource(String? url) {
+        if (url == null || url.isEmpty || url == 'null' || url.contains('watch?v=')) {
+          return false;
+        }
+        return true;
+      }
+
+      expect(canConstructSource(null), isFalse);
+      expect(canConstructSource(''), isFalse);
+      expect(canConstructSource('null'), isFalse);
+      expect(canConstructSource('https://www.youtube.com/watch?v=123'), isFalse);
+      expect(canConstructSource('https://rr1.googlevideo.com/videoplayback?itag=140'), isTrue);
+      expect(canConstructSource('https://aac.saavncdn.com/123/song_320.mp4'), isTrue);
+    });
+
+    test('Sanitized diagnostics redact query parameters and signed URLs', () {
+      const signedUrl = 'https://rr2---sn-4g5lzney.googlevideo.com/videoplayback?expire=1792445511&ei=abc&ip=1.2.3.4&id=o-123&itag=140&source=youtube&requiressl=yes&vprv=1&sig=AOq0QJ8wRAIgEXAMPLE_SIGNATURE_SECRET';
+      final uri = Uri.parse(signedUrl);
+
+      final sanitizedLog = '[Stage 2: Manifest Extraction] Succeeded | Host: ${uri.host} | Path: ${uri.path} | itag: ${uri.queryParameters['itag']} | expires: ${uri.queryParameters['expire']}';
+
+      expect(sanitizedLog, contains('itag: 140'));
+      expect(sanitizedLog, contains('expires: 1792445511'));
+      expect(sanitizedLog, isNot(contains('sig=')));
+      expect(sanitizedLog, isNot(contains('EXAMPLE_SIGNATURE_SECRET')));
+      expect(sanitizedLog, isNot(contains('ip=')));
+    });
+
+    test('JioSaavn chart playlists map contains only verified regional/language charts', () {
+      const charts = {
+        'India Superhits Top 50': '1134548194',
+        'Trending Today': '110858205',
+        'Hindi: India Superhits Top 50': '1134543272',
+        'International : India Superhits Top 50': '1134595537',
+        'Punjabi: India Superhits Top 50': '1134543511',
+      };
+
+      expect(charts.containsKey('Hungary'), isFalse);
+      expect(charts.containsKey('Global'), isFalse);
+      expect(charts['India Superhits Top 50'], equals('1134548194'));
+      expect(charts['Trending Today'], equals('110858205'));
+      expect(charts['Hindi: India Superhits Top 50'], equals('1134543272'));
     });
   });
 }

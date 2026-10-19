@@ -430,6 +430,7 @@ class YtMusicService {
     if (id == null || id.isEmpty) return null;
 
     final String image = images.isNotEmpty ? images.first.toString() : '';
+    final bool isPlayable = type == 'Song' || type == 'Video';
 
     return {
       'id': id,
@@ -445,6 +446,13 @@ class YtMusicService {
       'image': image,
       'images': images,
       'subscribers': subscribers,
+      if (isPlayable) ...{
+        'genre': 'YouTube',
+        'language': 'YouTube',
+        'perma_url': 'https://www.youtube.com/watch?v=$id',
+        'url': 'https://www.youtube.com/watch?v=$id',
+        'expire_at': '0',
+      },
     };
   }
 

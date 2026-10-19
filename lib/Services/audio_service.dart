@@ -409,7 +409,11 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
           tag: mediaItem.id,
         );
       } else {
-        if (mediaItem.genre == 'YouTube') {
+        final bool isYt = mediaItem.genre == 'YouTube' ||
+            mediaItem.extras?['language'] == 'YouTube' ||
+            (mediaItem.extras?['perma_url']?.toString().contains('youtu') == true) ||
+            (mediaItem.extras?['url']?.toString().contains('googlevideo.com') == true);
+        if (isYt) {
           final int expiredAt =
               int.tryParse((mediaItem.extras!['expire_at'] ?? '0').toString()) ??
                   0;
@@ -432,17 +436,31 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
                 Logger.root.info(
                   'youtube link found in cache for ${mediaItem.title}',
                 );
-                if (cacheSong) {
-                  audioSource = LockCachingAudioSource(
-                    Uri.parse(cachedData['url'].toString()),
-                  );
-                } else {
-                  audioSource =
-                      AudioSource.uri(Uri.parse(cachedData['url'].toString()));
+                final String currentQuality = Hive.isBoxOpen('settings')
+                    ? Hive.box('settings')
+                        .get('ytQuality', defaultValue: 'Low')
+                        .toString()
+                    : 'Low';
+                final String cachedLow = cachedData['lowUrl']?.toString() ?? '';
+                final String cachedHigh =
+                    cachedData['highUrl']?.toString() ?? '';
+                final String streamUrl =
+                    (currentQuality == 'High' && cachedHigh.isNotEmpty)
+                        ? cachedHigh
+                        : (cachedLow.isNotEmpty
+                            ? cachedLow
+                            : cachedData['url']?.toString() ?? '');
+
+                if (streamUrl.isNotEmpty &&
+                    !streamUrl.contains('watch?v=')) {
+                  final Uri streamUri = Uri.parse(streamUrl);
+                  audioSource = cacheSong
+                      ? LockCachingAudioSource(streamUri)
+                      : AudioSource.uri(streamUri);
+                  mediaItem.extras!['url'] = streamUrl;
+                  _mediaItemExpando[audioSource] = mediaItem;
+                  return audioSource;
                 }
-                mediaItem.extras!['url'] = cachedData['url'];
-                _mediaItemExpando[audioSource] = mediaItem;
-                return audioSource;
               }
             } else {
               Logger.root.info(
@@ -458,7 +476,9 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
             // construct the AudioSource so playback does not stall or drop to null.
             final String existingUrl =
                 mediaItem.extras?['url']?.toString() ?? '';
-            if (audioSource == null && existingUrl.isNotEmpty) {
+            if (audioSource == null &&
+                existingUrl.isNotEmpty &&
+                !existingUrl.contains('watch?v=')) {
               Logger.root.info(
                 'Using existing stream URL as fallback for ${mediaItem.title} while background refresh runs',
               );
@@ -469,38 +489,53 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
               return audioSource;
             }
           } else {
-            if (cacheSong) {
-              audioSource = LockCachingAudioSource(
-                Uri.parse(mediaItem.extras!['url'].toString()),
-              );
-            } else {
-              audioSource = AudioSource.uri(
-                Uri.parse(mediaItem.extras!['url'].toString()),
-              );
+            final String currentQuality = Hive.isBoxOpen('settings')
+                ? Hive.box('settings')
+                    .get('ytQuality', defaultValue: 'Low')
+                    .toString()
+                : 'Low';
+            final String rawUrl = mediaItem.extras!['url']?.toString() ?? '';
+            final String lowUrl =
+                mediaItem.extras?['lowUrl']?.toString() ?? '';
+            final String highUrl =
+                mediaItem.extras?['highUrl']?.toString() ?? '';
+            final String chosenUrl =
+                (currentQuality == 'High' && highUrl.isNotEmpty)
+                    ? highUrl
+                    : (lowUrl.isNotEmpty ? lowUrl : rawUrl);
+
+            if (chosenUrl.isNotEmpty && !chosenUrl.contains('watch?v=')) {
+              final Uri uri = Uri.parse(chosenUrl);
+              audioSource =
+                  cacheSong ? LockCachingAudioSource(uri) : AudioSource.uri(uri);
+              _mediaItemExpando[audioSource] = mediaItem;
+              return audioSource;
             }
-            _mediaItemExpando[audioSource] = mediaItem;
-            return audioSource;
           }
         } else {
+          final String rawMediaUrl =
+              mediaItem.extras?['url']?.toString() ?? '';
+          if (rawMediaUrl.isEmpty || rawMediaUrl == 'null') {
+            Logger.root.warning(
+              'Cannot construct AudioSource: media URL is empty for ${mediaItem.title}',
+            );
+            return null;
+          }
+          final String formattedUrl = rawMediaUrl.replaceAll(
+            '_96.',
+            "_${preferredQuality.replaceAll(' kbps', '')}.",
+          );
           if (cacheSong) {
             audioSource = LockCachingAudioSource(
-              Uri.parse(
-                mediaItem.extras!['url'].toString().replaceAll(
-                      '_96.',
-                      "_${preferredQuality.replaceAll(' kbps', '')}.",
-                    ),
-              ),
+              Uri.parse(formattedUrl),
             );
           } else {
             audioSource = AudioSource.uri(
-              Uri.parse(
-                mediaItem.extras!['url'].toString().replaceAll(
-                      '_96.',
-                      "_${preferredQuality.replaceAll(' kbps', '')}.",
-                    ),
-              ),
+              Uri.parse(formattedUrl),
             );
           }
+          _mediaItemExpando[audioSource] = mediaItem;
+          return audioSource;
         }
       }
     }

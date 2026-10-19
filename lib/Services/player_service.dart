@@ -229,12 +229,22 @@ class PlayerInvoke {
             playItem['url'] = newData['url'];
             playItem['duration'] = newData['duration'];
             playItem['expire_at'] = newData['expire_at'];
+            if (newData['lowUrl'] != null) playItem['lowUrl'] = newData['lowUrl'];
+            if (newData['highUrl'] != null) {
+              playItem['highUrl'] = newData['highUrl'];
+            }
+            playItem['genre'] = 'YouTube';
+            playItem['language'] = 'YouTube';
           }
         } else {
           Logger.root
               .info('youtube link found in cache for ${playItem["title"]}');
           playItem['url'] = chosenUrl;
           playItem['expire_at'] = cache['expire_at'];
+          if (cachedLow.isNotEmpty) playItem['lowUrl'] = cachedLow;
+          if (cachedHigh.isNotEmpty) playItem['highUrl'] = cachedHigh;
+          playItem['genre'] = 'YouTube';
+          playItem['language'] = 'YouTube';
         }
       } else {
         final newData =
@@ -246,6 +256,12 @@ class PlayerInvoke {
           playItem['url'] = newData['url'];
           playItem['duration'] = newData['duration'];
           playItem['expire_at'] = newData['expire_at'];
+          if (newData['lowUrl'] != null) playItem['lowUrl'] = newData['lowUrl'];
+          if (newData['highUrl'] != null) {
+            playItem['highUrl'] = newData['highUrl'];
+          }
+          playItem['genre'] = 'YouTube';
+          playItem['language'] = 'YouTube';
         }
       }
     }
@@ -264,12 +280,21 @@ class PlayerInvoke {
     final Map? nextItem = safeIndex == response.length - 1
         ? null
         : response[safeIndex + 1] as Map;
-    if (playItem['genre'] == 'YouTube' || playItem['language'] == 'YouTube') {
+    final bool isPlayItemYt = playItem['genre'] == 'YouTube' ||
+        playItem['language'] == 'YouTube' ||
+        (playItem['perma_url']?.toString().contains('youtu') == true) ||
+        (playItem['url']?.toString().contains('youtu') == true);
+    if (isPlayItemYt) {
       await refreshYtLink(playItem);
     }
-    if (nextItem != null &&
-        (nextItem['genre'] == 'YouTube' || nextItem['language'] == 'YouTube')) {
-      await refreshYtLink(nextItem);
+    if (nextItem != null) {
+      final bool isNextItemYt = nextItem['genre'] == 'YouTube' ||
+          nextItem['language'] == 'YouTube' ||
+          (nextItem['perma_url']?.toString().contains('youtu') == true) ||
+          (nextItem['url']?.toString().contains('youtu') == true);
+      if (isNextItemYt) {
+        await refreshYtLink(nextItem);
+      }
     }
 
     queue.addAll(

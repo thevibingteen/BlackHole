@@ -17,16 +17,9 @@
  * Copyright (c) 2021-2022, Ankit Sangwan
  */
 
-import 'package:app_links/app_links.dart';
 import 'package:blackhole/APIs/api.dart';
-import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/CustomWidgets/custom_physics.dart';
 import 'package:blackhole/CustomWidgets/empty_screen.dart';
-import 'package:blackhole/Helpers/countrycodes.dart';
-import 'package:blackhole/Helpers/spotify_helper.dart';
-// import 'package:blackhole/Helpers/countrycodes.dart';
-import 'package:blackhole/Screens/Search/search.dart';
-import 'package:blackhole/Screens/Settings/setting.dart';
 import 'package:blackhole/Services/player_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -41,6 +34,14 @@ bool localFetched = false;
 bool globalFetched = false;
 final ValueNotifier<bool> localFetchFinished = ValueNotifier<bool>(false);
 final ValueNotifier<bool> globalFetchFinished = ValueNotifier<bool>(false);
+
+const Map<String, String> jioSaavnCharts = {
+  'India Superhits Top 50': '1134548194',
+  'Trending Today': '110858205',
+  'Hindi: India Superhits Top 50': '1134543272',
+  'International : India Superhits Top 50': '1134595537',
+  'Punjabi: India Superhits Top 50': '1134543511',
+};
 
 class TopCharts extends StatefulWidget {
   final PageController pageController;
@@ -72,8 +73,61 @@ class _TopChartsState extends State<TopCharts>
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: IconButton(
                 icon: const Icon(Icons.my_location_rounded),
+                tooltip: 'Select Chart',
                 onPressed: () async {
-                  await SpotifyCountry().changeCountry(context: context);
+                  final String current = Hive.box('settings')
+                      .get('region', defaultValue: 'India Superhits Top 50')
+                      .toString();
+                  await showDialog(
+                    context: context,
+                    builder: (BuildContext ctx) {
+                      return SimpleDialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15.0),
+                        ),
+                        title: const Text('Select JioSaavn Chart'),
+                        children: jioSaavnCharts.keys.map((String name) {
+                          final bool isSelected = current == name ||
+                              (current == 'India' &&
+                                  name == 'India Superhits Top 50');
+                          return SimpleDialogOption(
+                            onPressed: () {
+                              final String id = jioSaavnCharts[name]!;
+                              Hive.box('settings').put('saavn_chart_id', id);
+                              Hive.box('settings').put('region', name);
+                              Navigator.pop(ctx);
+                              localFetchFinished.value = false;
+                              scrapData(name);
+                              setState(() {});
+                            },
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSelected
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_off_rounded,
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : null,
+                                ),
+                                const SizedBox(width: 12.0),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: TextStyle(
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  );
                 },
               ),
             ),
@@ -151,11 +205,13 @@ class _TopChartsState extends State<TopCharts>
                 valueListenable: Hive.box('settings').listenable(),
                 builder: (BuildContext context, Box box, Widget? widget) {
                   return TopPage(
-                    type: box.get('region', defaultValue: 'India').toString(),
+                    type: box
+                        .get('region',
+                            defaultValue: 'India Superhits Top 50')
+                        .toString(),
                   );
                 },
               ),
-              // TopPage(type: 'local'),
               const TopPage(type: 'Global'),
             ],
           ),
@@ -166,7 +222,17 @@ class _TopChartsState extends State<TopCharts>
 }
 
 Future<List> getChartDetails(String type) async {
-  final String playlistId = type == 'Global' ? '1134595537' : '1134548194';
+  String playlistId;
+  if (type == 'Global') {
+    playlistId = '1134595537'; // International : India Superhits Top 50
+  } else {
+    playlistId = jioSaavnCharts[type] ??
+        (Hive.isBoxOpen('settings')
+            ? Hive.box('settings')
+                .get('saavn_chart_id', defaultValue: '1134548194')
+                .toString()
+            : '1134548194');
+  }
   try {
     final Map res = await SaavnAPI().fetchPlaylistSongs(playlistId);
     final List songs = (res['songs'] as List? ?? []);
@@ -183,7 +249,7 @@ Future<List> getChartDetails(String type) async {
     }
     return data;
   } catch (e) {
-    Logger.root.severe('Error in getChartDetails ($type): $e');
+    Logger.root.severe('Error in getChartDetails ($type, id: $playlistId): $e');
     return [];
   }
 }
@@ -337,14 +403,14 @@ class _TopPageState extends State<TopPage>
                           }
                         },
                         itemBuilder: (context) => [
-                          PopupMenuItem(
+                          const PopupMenuItem(
                             value: 0,
                             child: Row(
                               children: [
-                                const Icon(Icons.open_in_new_rounded),
-                                const SizedBox(width: 10.0),
+                                Icon(Icons.open_in_new_rounded),
+                                SizedBox(width: 10.0),
                                 Text(
-                                  AppLocalizations.of(context)!.openInSpotify,
+                                  'Open in JioSaavn',
                                 ),
                               ],
                             ),

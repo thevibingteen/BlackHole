@@ -538,10 +538,10 @@ class YouTubeServices {
     Map? data,
     bool getUrl = true,
   }) async {
-    final int? durSec = video.duration?.inSeconds ??
-        int.tryParse(data?['duration']?.toString() ?? '');
-    if (durSec == null && !getUrl) return null;
-    final String durationStr = (durSec ?? 180).toString();
+    final int durSec = video.duration?.inSeconds ??
+        int.tryParse(data?['duration']?.toString() ?? '') ??
+        180;
+    final String durationStr = durSec.toString();
 
     List<String> urls = [];
     String finalUrl = '';
@@ -573,9 +573,12 @@ class YouTubeServices {
                   (cachedLow.isNotEmpty && cachedHigh.isNotEmpty))) {
             // giving valid cache link
             Logger.root.info(
-              'formatVideo | Cache HIT for ${video.id.value} (quality: $quality, expires in ${cachedExpiredAt - now}s)',
+              '[Stage 1: Cache Check] Cache HIT for ${video.id.value} (quality: $quality, expires in ${cachedExpiredAt - now}s)',
             );
-            urls = [chosenUrl];
+            urls = [
+              cachedLow.isNotEmpty ? cachedLow : chosenUrl,
+              cachedHigh.isNotEmpty ? cachedHigh : chosenUrl
+            ];
             finalUrl = chosenUrl;
             expireAt = cachedExpiredAt.toString();
           } else {
@@ -586,48 +589,59 @@ class YouTubeServices {
                     ? 'invalid URL'
                     : 'quality mismatch ($cachedQuality != $quality)');
             Logger.root.info(
-              'formatVideo | Cache REFRESH for ${video.id.value} ($reason), fetching fresh manifest',
+              '[Stage 1: Cache Check] Cache REFRESH for ${video.id.value} ($reason), fetching fresh manifest',
             );
             urls = await getUri(video);
           }
         } else {
           // cache not present
           Logger.root.info(
-            'formatVideo | Cache MISS for ${video.id.value}, fetching fresh manifest',
+            '[Stage 1: Cache Check] Cache MISS for ${video.id.value}, fetching fresh manifest',
           );
           urls = await getUri(video);
         }
 
-        if (urls.isNotEmpty) {
-          finalUrl = quality == 'High' ? urls.last : urls.first;
-          final match = RegExp('expire=([0-9]+)').firstMatch(finalUrl);
-          final int parsedExpire = match != null
-              ? (int.tryParse(match.group(1)!) ?? (now + 18000))
-              : (now + 18000);
-          expireAt = parsedExpire.toString();
-
-          if (Hive.isBoxOpen('ytlinkcache')) {
-            try {
-              await Hive.box('ytlinkcache').put(
-                video.id.value,
-                {
-                  'url': finalUrl,
-                  'expire_at': expireAt,
-                  'quality': quality,
-                  'lowUrl': urls.first,
-                  'highUrl': urls.last,
-                  'cached_at': now,
-                },
-              );
-            } catch (e) {
-              Logger.root.severe('Hive Error in formatVideo cache save: $e');
-            }
+        if (urls.isEmpty) {
+          Logger.root.info(
+            'formatVideo | getUri returned 0 URLs for ${video.id.value}, attempting InnerTube fallback',
+          );
+          final Map? fallbackMap = await formatVideoFromInnerTube(
+            id: video.id.value,
+            quality: quality,
+            data: data,
+          );
+          if (fallbackMap != null) {
+            return fallbackMap;
           }
-        } else {
           Logger.root.warning(
-            'No stream URLs resolved for YouTube video ${video.id.value}',
+            '[Stage 5: Final Result] No stream URLs resolved for YouTube video ${video.id.value}',
           );
           return null;
+        }
+
+        finalUrl = quality == 'High' ? urls.last : urls.first;
+        final match = RegExp('expire=([0-9]+)').firstMatch(finalUrl);
+        final int parsedExpire = match != null
+            ? (int.tryParse(match.group(1)!) ?? (now + 18000))
+            : (now + 18000);
+        expireAt = parsedExpire.toString();
+
+        if (Hive.isBoxOpen('ytlinkcache')) {
+          try {
+            await Hive.box('ytlinkcache').put(
+              video.id.value,
+              {
+                'url': finalUrl,
+                'expire_at': expireAt,
+                'quality': quality,
+                'lowUrl': urls.first,
+                'highUrl': urls.last,
+                'cached_at': now,
+              },
+            );
+          } catch (e) {
+            Logger.root.severe('Hive Error in formatVideo cache save: $e');
+          }
         }
       } catch (e) {
         Logger.root.severe('Error resolving stream in formatVideo: $e');
@@ -674,14 +688,125 @@ class YouTubeServices {
             await formatVideo(video: vid, quality: 'High', getUrl: false);
         if (res != null) videoResult.add(res);
       }
-      return [
-        {
-          'title': 'Videos',
-          'items': videoResult,
-        }
-      ];
+      if (videoResult.isNotEmpty) {
+        return [
+          {
+            'title': 'Videos',
+            'items': videoResult,
+          }
+        ];
+      }
     } catch (e) {
-      Logger.root.severe('Error in fetchSearchResults for $query: $e');
+      Logger.root.warning(
+        'yt.search.search failed for "$query": $e, attempting InnerTube search fallback',
+      );
+    }
+
+    try {
+      final List<Map> fallbackResults = await searchInnerTube(query);
+      if (fallbackResults.isNotEmpty) {
+        Logger.root.info(
+          'InnerTube search fallback succeeded for "$query" (${fallbackResults.length} results)',
+        );
+        return [
+          {
+            'title': 'Videos',
+            'items': fallbackResults,
+          }
+        ];
+      }
+    } catch (e) {
+      Logger.root.severe('InnerTube search fallback failed for "$query": $e');
+    }
+
+    return [];
+  }
+
+  Future<List<Map>> searchInnerTube(String query) async {
+    try {
+      final Uri uri = Uri.parse('https://www.youtube.com/youtubei/v1/search');
+      final body = json.encode({
+        'query': query,
+        'context': {
+          'client': {
+            'clientName': 'ANDROID',
+            'clientVersion': '21.26.364',
+            'androidSdkVersion': 30,
+            'userAgent':
+                'com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip',
+            'osName': 'Android',
+            'osVersion': '11',
+            'hl': 'en',
+            'gl': 'US',
+          },
+        },
+      });
+
+      final headers = {
+        'Content-Type': 'application/json',
+        'User-Agent':
+            'com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip',
+        'X-YouTube-Client-Name': '3',
+        'X-YouTube-Client-Version': '21.26.364',
+      };
+
+      final Response res = await post(uri, headers: headers, body: body)
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return [];
+
+      final data = json.decode(utf8.decode(res.bodyBytes));
+      final contents =
+          data['contents']?['sectionListRenderer']?['contents'] as List? ?? [];
+      final List<Map> results = [];
+
+      for (final sec in contents) {
+        final itemSec =
+            sec['itemSectionRenderer']?['contents'] as List? ?? [];
+        for (final item in itemSec) {
+          final vid = item['videoRenderer'] ?? item['compactVideoRenderer'];
+          if (vid != null && vid['videoId'] != null) {
+            final String videoId = vid['videoId'].toString();
+            final String title =
+                vid['title']?['runs']?[0]?['text']?.toString() ??
+                    vid['title']?['simpleText']?.toString() ??
+                    '';
+            final String author =
+                vid['ownerText']?['runs']?[0]?['text']?.toString() ??
+                    vid['shortBylineText']?['runs']?[0]?['text']?.toString() ??
+                    '';
+            final String durationStr =
+                vid['lengthText']?['simpleText']?.toString() ??
+                    vid['lengthText']?['runs']?[0]?['text']?.toString() ??
+                    '180';
+            final List thumbs =
+                (vid['thumbnail']?['thumbnails'] as List?) ?? [];
+            final String thumbUrl =
+                thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+
+            if (title.isNotEmpty) {
+              results.add({
+                'id': videoId,
+                'title': title,
+                'artist': author.replaceAll('- Topic', '').trim(),
+                'album': author.replaceAll('- Topic', '').trim(),
+                'duration': durationStr,
+                'image': thumbUrl,
+                'secondImage': thumbUrl,
+                'language': 'YouTube',
+                'genre': 'YouTube',
+                'perma_url': 'https://www.youtube.com/watch?v=$videoId',
+                'url': 'https://www.youtube.com/watch?v=$videoId',
+                'expire_at': '0',
+                '320kbps': 'false',
+                'has_lyrics': 'false',
+              });
+            }
+          }
+        }
+      }
+      return results;
+    } catch (e) {
+      Logger.root.warning('Error in searchInnerTube for "$query": $e');
       return [];
     }
   }
@@ -948,24 +1073,7 @@ class YouTubeServices {
   Future<List<String>> _fetchUriInternal(Video video) async {
     final Stopwatch stopwatch = Stopwatch()..start();
 
-    // 1. Try InnerTube mobile player endpoint first
-    try {
-      final List<String> innerTubeUrls =
-          await fetchStreamsFromInnerTube(video.id.value);
-      if (innerTubeUrls.isNotEmpty) {
-        stopwatch.stop();
-        Logger.root.info(
-          'InnerTube stream resolved for ${video.id.value} in ${stopwatch.elapsedMilliseconds}ms (${innerTubeUrls.length} urls)',
-        );
-        return innerTubeUrls;
-      }
-    } catch (e) {
-      Logger.root.warning(
-        'InnerTube stream resolution failed for ${video.id.value}: $e, falling back to manifest',
-      );
-    }
-
-    // 2. Fall back to youtube_explode manifest
+    // 1. Prioritize youtube_explode manifest extraction for pure audio-only streams
     try {
       final StreamManifest manifest = await yt.videos.streamsClient
           .getManifest(video.id)
@@ -979,58 +1087,78 @@ class YouTubeServices {
       final int audioCount = audioOnlyList.length;
       final int muxedCount = muxedList.length;
 
-      Logger.root.info(
-        'YouTube manifest resolved for ${video.id.value} in ${stopwatch.elapsedMilliseconds}ms | '
-        'audio-only streams: $audioCount, muxed streams: $muxedCount',
-      );
+      if (audioOnlyList.isNotEmpty) {
+        List<AudioOnlyStreamInfo> candidateStreams = audioOnlyList;
+        if (Platform.isIOS || Platform.isMacOS) {
+          final List<AudioOnlyStreamInfo> m4aStreams = audioOnlyList
+              .where((element) => element.audioCodec.contains('mp4'))
+              .toList();
 
-      if (audioOnlyList.isEmpty) {
-        if (muxedList.isNotEmpty) {
-          final selectedLow = muxedList.first;
-          final selectedHigh = muxedList.last;
-          Logger.root.info(
-            'Selected muxed stream for ${video.id.value} | container: ${selectedHigh.container.name}, '
-            'audioCodec: ${selectedHigh.audioCodec}, bitrate: ${selectedHigh.bitrate.kiloBitsPerSecond} kbps',
-          );
-          return [selectedLow.url.toString(), selectedHigh.url.toString()];
+          if (m4aStreams.isNotEmpty) {
+            candidateStreams = m4aStreams;
+          }
         }
-        Logger.root.warning(
-          'No audio or muxed streams found in manifest for ${video.id.value}',
+
+        final AudioOnlyStreamInfo lowStream = candidateStreams.first;
+        final AudioOnlyStreamInfo highStream = candidateStreams.last;
+
+        Logger.root.info(
+          '[Stage 2: Manifest Extraction] Succeeded in ${stopwatch.elapsedMilliseconds}ms for ${video.id.value} | '
+          'Audio streams: $audioCount | '
+          'Low: ${lowStream.bitrate.kiloBitsPerSecond}kbps (${lowStream.audioCodec}) | '
+          'High: ${highStream.bitrate.kiloBitsPerSecond}kbps (${highStream.audioCodec})',
         );
-        return [];
+
+        return [
+          lowStream.url.toString(),
+          highStream.url.toString(),
+        ];
+      } else if (muxedList.isNotEmpty) {
+        final selectedLow = muxedList.first;
+        final selectedHigh = muxedList.last;
+        Logger.root.info(
+          '[Stage 2: Manifest Extraction] Using muxed fallback for ${video.id.value} in ${stopwatch.elapsedMilliseconds}ms | '
+          'Muxed streams: $muxedCount (container: ${selectedHigh.container.name}, bitrate: ${selectedHigh.bitrate.kiloBitsPerSecond}kbps)',
+        );
+        return [selectedLow.url.toString(), selectedHigh.url.toString()];
+      } else {
+        Logger.root.warning(
+          '[Stage 2: Manifest Extraction] Empty stream manifest for ${video.id.value} after ${stopwatch.elapsedMilliseconds}ms, falling back to InnerTube',
+        );
       }
-
-      List<AudioOnlyStreamInfo> candidateStreams = audioOnlyList;
-      if (Platform.isIOS || Platform.isMacOS) {
-        final List<AudioOnlyStreamInfo> m4aStreams = audioOnlyList
-            .where((element) => element.audioCodec.contains('mp4'))
-            .toList();
-
-        if (m4aStreams.isNotEmpty) {
-          candidateStreams = m4aStreams;
-        }
-      }
-
-      final AudioOnlyStreamInfo lowStream = candidateStreams.first;
-      final AudioOnlyStreamInfo highStream = candidateStreams.last;
-
-      Logger.root.info(
-        'Selected audio stream for ${video.id.value} | '
-        'High: [container: ${highStream.container.name}, codec: ${highStream.audioCodec}, bitrate: ${highStream.bitrate.kiloBitsPerSecond} kbps] | '
-        'Low: [container: ${lowStream.container.name}, codec: ${lowStream.audioCodec}, bitrate: ${lowStream.bitrate.kiloBitsPerSecond} kbps]',
-      );
-
-      return [
-        lowStream.url.toString(),
-        highStream.url.toString(),
-      ];
     } catch (e) {
-      stopwatch.stop();
-      Logger.root.severe(
-        'Error getting YouTube stream manifest for ${video.id.value} after ${stopwatch.elapsedMilliseconds}ms '
-        '(${e.runtimeType}): $e',
+      Logger.root.warning(
+        '[Stage 2: Manifest Extraction] Failed for ${video.id.value} after ${stopwatch.elapsedMilliseconds}ms '
+        '(${e.runtimeType}): $e, falling back to [Stage 4: InnerTube Fallback]',
       );
-      return [];
     }
+
+    // 2. Fallback to InnerTube mobile player endpoint
+    try {
+      final innerWatch = Stopwatch()..start();
+      final List<String> innerTubeUrls =
+          await fetchStreamsFromInnerTube(video.id.value);
+      innerWatch.stop();
+      if (innerTubeUrls.isNotEmpty) {
+        Logger.root.info(
+          '[Stage 4: InnerTube Fallback] Succeeded in ${innerWatch.elapsedMilliseconds}ms for ${video.id.value} '
+          '(${innerTubeUrls.length} stream URLs resolved)',
+        );
+        return innerTubeUrls;
+      } else {
+        Logger.root.warning(
+          '[Stage 4: InnerTube Fallback] Returned 0 stream URLs for ${video.id.value} after ${innerWatch.elapsedMilliseconds}ms',
+        );
+      }
+    } catch (e) {
+      Logger.root.severe(
+        '[Stage 4: InnerTube Fallback] Failed for ${video.id.value} (${e.runtimeType}): $e',
+      );
+    }
+
+    Logger.root.severe(
+      '[Stage 5: Final Result] Failed to resolve any stream URL for ${video.id.value}',
+    );
+    return [];
   }
 }
