@@ -147,7 +147,7 @@ packages:
     source: hosted
     version: "1.1.1"
   collection:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
       name: collection
       sha256: "4a07be6cb69c84d677a6c3096fcf960cc3285a8330b4603e0d463d15d9bd934c"
@@ -365,7 +365,7 @@ packages:
     source: hosted
     version: "2.0.14"
   flutter_rust_bridge:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
       name: flutter_rust_bridge
       sha256: "02ae507b284332ff725644d47c2e10e80a3f4821f1c61b5efb33ba892f33501c"
@@ -1143,10 +1143,10 @@ packages:
     dependency: "direct main"
     description:
       name: youtube_explode_dart
-      sha256: "947ba05e0c4f050743e480e7bca3575ff6427d86cc898c1a69f5e1d188cdc9e0"
+      sha256: "07889a6229a63e78f8d45a3b852897c2e0fa42e96c4daa38d411be211575bc38"
       url: "https://pub.dev"
     source: hosted
-    version: "2.5.3"
+    version: "1.12.4"
 sdks:
   dart: ">=3.0.0 <4.0.0"
   flutter: ">=3.3.0"

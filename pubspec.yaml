@@ -56,17 +56,13 @@ dependencies:
   sliding_up_panel: ^2.0.0+1
   url_launcher: ^6.1.11
   uuid: ^3.0.7
-  youtube_explode_dart: 2.5.3
+  youtube_explode_dart: ^1.12.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   lint: ^2.1.2
   msix: ^3.14.2
-
-dependency_overrides:
-  collection: 1.17.1
-  flutter_rust_bridge: 1.77.0
 
 flutter:
   uses-material-design: true
