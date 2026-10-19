@@ -187,21 +187,38 @@ class PlayerInvoke {
   }
 
   static Future<void> refreshYtLink(Map playItem) async {
-    // final bool cacheSong =
-    // Hive.box('settings').get('cacheSong', defaultValue: true) as bool;
-    final int expiredAt = int.parse((playItem['expire_at'] ?? '0').toString());
-    if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 > expiredAt) {
+    final int expiredAt =
+        int.tryParse((playItem['expire_at'] ?? '0').toString()) ?? 0;
+    final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (now + 350 > expiredAt) {
       Logger.root.info(
         'before service | youtube link expired for ${playItem["title"]}',
       );
       if (Hive.box('ytlinkcache').containsKey(playItem['id'])) {
         final Map cache =
             await Hive.box('ytlinkcache').get(playItem['id']) as Map;
-        final int expiredAt = int.parse((cache['expire_at'] ?? '0').toString());
-        // final String wasCacheEnabled = cache['cached'].toString();
-        if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 > expiredAt) {
+        final int cachedExpiredAt =
+            int.tryParse((cache['expire_at'] ?? '0').toString()) ?? 0;
+        final String currentQuality = Hive.box('settings')
+            .get('ytQuality', defaultValue: 'Low')
+            .toString();
+        final String cachedQuality = cache['quality']?.toString() ?? '';
+        final String cachedHigh = cache['highUrl']?.toString() ?? '';
+        final String cachedLow = cache['lowUrl']?.toString() ?? '';
+        final String chosenUrl =
+            (currentQuality == 'High' && cachedHigh.isNotEmpty)
+                ? cachedHigh
+                : (cachedLow.isNotEmpty
+                    ? cachedLow
+                    : cache['url']?.toString() ?? '');
+
+        if (now + 350 > cachedExpiredAt ||
+            chosenUrl.isEmpty ||
+            (cachedQuality.isNotEmpty &&
+                cachedQuality != currentQuality &&
+                cachedHigh.isEmpty)) {
           Logger.root
-              .info('youtube link expired in cache for ${playItem["title"]}');
+              .info('youtube link expired/stale in cache for ${playItem["title"]}');
           final newData =
               await YouTubeServices().refreshLink(playItem['id'].toString());
           Logger.root.info(
@@ -215,7 +232,7 @@ class PlayerInvoke {
         } else {
           Logger.root
               .info('youtube link found in cache for ${playItem["title"]}');
-          playItem['url'] = cache['url'];
+          playItem['url'] = chosenUrl;
           playItem['expire_at'] = cache['expire_at'];
         }
       } else {

@@ -72,6 +72,12 @@ class YouTubeServices {
     bool? getUrl,
   }) async {
     try {
+      final String entryPoint = (data?['type'] ?? 'direct').toString();
+      final String videoTitle = (data?['title'] ?? id).toString();
+      Logger.root.info(
+        'formatVideoFromId | id: $id, entryPoint: $entryPoint, title: "$videoTitle", getUrl: $getUrl',
+      );
+
       final Video? vid = await getVideoFromId(id);
       if (vid == null) {
         Logger.root.warning('getVideoFromId returned null for $id');
@@ -108,9 +114,16 @@ class YouTubeServices {
       String quality = 'Low';
       if (Hive.isBoxOpen('settings')) {
         quality = Hive.box('settings')
-            .get('quality', defaultValue: 'Low')
+            .get('ytQuality', defaultValue: 'Low')
             .toString();
       }
+      // Invalidate cache before refreshing to ensure fresh stream URL from provider
+      if (Hive.isBoxOpen('ytlinkcache')) {
+        await Hive.box('ytlinkcache').delete(id);
+      }
+      Logger.root.info(
+        'refreshLink | id: $id, cache invalidated, resolving fresh stream (quality: $quality)',
+      );
       final Map? data = await formatVideo(video: res, quality: quality);
       return data;
     } catch (e) {
@@ -517,19 +530,43 @@ class YouTubeServices {
           final int cachedExpiredAt =
               int.tryParse(cachedData?['expire_at']?.toString() ?? '') ?? 0;
           final String cachedUrl = cachedData?['url']?.toString() ?? '';
+          final String cachedQuality = cachedData?['quality']?.toString() ?? '';
+          final String cachedLow = cachedData?['lowUrl']?.toString() ?? '';
+          final String cachedHigh = cachedData?['highUrl']?.toString() ?? '';
 
-          if (cachedUrl.isNotEmpty && (now + 350 <= cachedExpiredAt)) {
+          final bool notExpired = now + 350 <= cachedExpiredAt;
+          final String chosenUrl = (quality == 'High' && cachedHigh.isNotEmpty)
+              ? cachedHigh
+              : (cachedLow.isNotEmpty ? cachedLow : cachedUrl);
+
+          if (chosenUrl.isNotEmpty &&
+              notExpired &&
+              (cachedQuality == quality ||
+                  (cachedLow.isNotEmpty && cachedHigh.isNotEmpty))) {
             // giving valid cache link
-            Logger.root.info('Valid cache found for ${video.id.value}');
-            urls = [cachedUrl];
-            finalUrl = cachedUrl;
+            Logger.root.info(
+              'formatVideo | Cache HIT for ${video.id.value} (quality: $quality, expires in ${cachedExpiredAt - now}s)',
+            );
+            urls = [chosenUrl];
+            finalUrl = chosenUrl;
             expireAt = cachedExpiredAt.toString();
           } else {
-            // cache expired or invalid
+            // cache expired, invalid, or quality mismatch
+            final String reason = !notExpired
+                ? 'expired'
+                : (chosenUrl.isEmpty
+                    ? 'invalid URL'
+                    : 'quality mismatch ($cachedQuality != $quality)');
+            Logger.root.info(
+              'formatVideo | Cache REFRESH for ${video.id.value} ($reason), fetching fresh manifest',
+            );
             urls = await getUri(video);
           }
         } else {
           // cache not present
+          Logger.root.info(
+            'formatVideo | Cache MISS for ${video.id.value}, fetching fresh manifest',
+          );
           urls = await getUri(video);
         }
 
@@ -638,40 +675,71 @@ class YouTubeServices {
   }
 
   Future<List<String>> _fetchUriInternal(Video video) async {
+    final Stopwatch stopwatch = Stopwatch()..start();
     try {
       final StreamManifest manifest = await yt.videos.streamsClient
           .getManifest(video.id)
-          .timeout(const Duration(seconds: 15));
-      final List<AudioOnlyStreamInfo> sortedStreamInfo =
-          manifest.audioOnly.sortByBitrate();
+          .timeout(const Duration(seconds: 35));
+      stopwatch.stop();
 
-      if (sortedStreamInfo.isEmpty) {
-        final muxed = manifest.muxed.sortByBitrate();
-        if (muxed.isNotEmpty) {
-          return [muxed.first.url.toString(), muxed.last.url.toString()];
+      final List<AudioOnlyStreamInfo> audioOnlyList =
+          manifest.audioOnly.sortByBitrate();
+      final List<MuxedStreamInfo> muxedList =
+          manifest.muxed.sortByBitrate();
+
+      final int audioCount = audioOnlyList.length;
+      final int muxedCount = muxedList.length;
+
+      Logger.root.info(
+        'YouTube manifest resolved for ${video.id.value} in ${stopwatch.elapsedMilliseconds}ms | '
+        'audio-only streams: $audioCount, muxed streams: $muxedCount',
+      );
+
+      if (audioOnlyList.isEmpty) {
+        if (muxedList.isNotEmpty) {
+          final selectedLow = muxedList.first;
+          final selectedHigh = muxedList.last;
+          Logger.root.info(
+            'Selected muxed stream for ${video.id.value} | container: ${selectedHigh.container.name}, '
+            'audioCodec: ${selectedHigh.audioCodec}, bitrate: ${selectedHigh.bitrate.kiloBitsPerSecond} kbps',
+          );
+          return [selectedLow.url.toString(), selectedHigh.url.toString()];
         }
+        Logger.root.warning(
+          'No audio or muxed streams found in manifest for ${video.id.value}',
+        );
         return [];
       }
 
+      List<AudioOnlyStreamInfo> candidateStreams = audioOnlyList;
       if (Platform.isIOS || Platform.isMacOS) {
-        final List<AudioOnlyStreamInfo> m4aStreams = sortedStreamInfo
+        final List<AudioOnlyStreamInfo> m4aStreams = audioOnlyList
             .where((element) => element.audioCodec.contains('mp4'))
             .toList();
 
         if (m4aStreams.isNotEmpty) {
-          return [
-            m4aStreams.first.url.toString(),
-            m4aStreams.last.url.toString(),
-          ];
+          candidateStreams = m4aStreams;
         }
       }
+
+      final AudioOnlyStreamInfo lowStream = candidateStreams.first;
+      final AudioOnlyStreamInfo highStream = candidateStreams.last;
+
+      Logger.root.info(
+        'Selected audio stream for ${video.id.value} | '
+        'High: [container: ${highStream.container.name}, codec: ${highStream.audioCodec}, bitrate: ${highStream.bitrate.kiloBitsPerSecond} kbps] | '
+        'Low: [container: ${lowStream.container.name}, codec: ${lowStream.audioCodec}, bitrate: ${lowStream.bitrate.kiloBitsPerSecond} kbps]',
+      );
+
       return [
-        sortedStreamInfo.first.url.toString(),
-        sortedStreamInfo.last.url.toString(),
+        lowStream.url.toString(),
+        highStream.url.toString(),
       ];
     } catch (e) {
+      stopwatch.stop();
       Logger.root.severe(
-        'Error getting YouTube stream manifest for ${video.id.value}: $e',
+        'Error getting YouTube stream manifest for ${video.id.value} after ${stopwatch.elapsedMilliseconds}ms '
+        '(${e.runtimeType}): $e',
       );
       return [];
     }

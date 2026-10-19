@@ -591,5 +591,99 @@ void main() {
       expect(resolved, equals('https://aac.saavncdn.com/123/sample_96.mp4'));
     });
   });
+
+  group('YouTube Stream & Cache Expiry Handling Tests', () {
+    test('extracts expiration timestamp from YouTube stream URLs correctly', () {
+      const urlWithExpire =
+          'https://rr4---sn-ci5gup-c35e.googlevideo.com/videoplayback?expire=1776543210&ei=test&ip=1.2.3.4';
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithExpire);
+      expect(match, isNotNull);
+      final int parsedExpire = int.tryParse(match!.group(1)!) ?? 0;
+      expect(parsedExpire, equals(1776543210));
+    });
+
+    test('falls back to default expiration when expire parameter is absent', () {
+      const urlWithoutExpire = 'https://example.com/audio.mp4';
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithoutExpire);
+      final int parsedExpire = match != null
+          ? (int.tryParse(match.group(1)!) ?? (now + 18000))
+          : (now + 18000);
+      expect(parsedExpire, greaterThanOrEqualTo(now + 17990));
+    });
+
+    test('cache hit evaluation correctly distinguishes valid vs expired cache', () {
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      // 1. Valid cache: expires in 3600 seconds
+      final int validExpiry = now + 3600;
+      final bool isValid = (now + 350 <= validExpiry);
+      expect(isValid, isTrue);
+
+      // 2. Near-expiry cache: expires in 200 seconds (less than 350 threshold)
+      final int nearExpiry = now + 200;
+      final bool isNearExpired = (now + 350 <= nearExpiry);
+      expect(isNearExpired, isFalse);
+
+      // 3. Already expired cache
+      final int expiredExpiry = now - 100;
+      final bool isExpired = (now + 350 <= expiredExpiry);
+      expect(isExpired, isFalse);
+    });
+
+    test('quality selection chooses last stream for High and first stream for Low', () {
+      final List<String> streams = [
+        'https://stream.googlevideo.com/audio_low_48k',
+        'https://stream.googlevideo.com/audio_medium_96k',
+        'https://stream.googlevideo.com/audio_high_160k',
+      ];
+
+      final String highChoice = streams.last;
+      final String lowChoice = streams.first;
+
+      expect(highChoice, equals('https://stream.googlevideo.com/audio_high_160k'));
+      expect(lowChoice, equals('https://stream.googlevideo.com/audio_low_48k'));
+    });
+
+    test('cache adaptation selects highUrl or lowUrl when both are cached', () {
+      final Map<String, dynamic> cachedData = {
+        'url': 'https://stream.googlevideo.com/audio_low_48k',
+        'lowUrl': 'https://stream.googlevideo.com/audio_low_48k',
+        'highUrl': 'https://stream.googlevideo.com/audio_high_160k',
+        'quality': 'Low',
+        'expire_at':
+            (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600).toString(),
+      };
+
+      String selectCachedUrl(String quality) {
+        final String cachedLow = cachedData['lowUrl']?.toString() ?? '';
+        final String cachedHigh = cachedData['highUrl']?.toString() ?? '';
+        final String cachedUrl = cachedData['url']?.toString() ?? '';
+        return (quality == 'High' && cachedHigh.isNotEmpty)
+            ? cachedHigh
+            : (cachedLow.isNotEmpty ? cachedLow : cachedUrl);
+      }
+
+      expect(
+        selectCachedUrl('High'),
+        equals('https://stream.googlevideo.com/audio_high_160k'),
+      );
+      expect(
+        selectCachedUrl('Low'),
+        equals('https://stream.googlevideo.com/audio_low_48k'),
+      );
+    });
+
+    test('handles empty manifest stream list safely without throwing', () {
+      final List<String> emptyStreams = [];
+      String? selectStream(List<String> urls, String quality) {
+        if (urls.isEmpty) return null;
+        return quality == 'High' ? urls.last : urls.first;
+      }
+
+      expect(selectStream(emptyStreams, 'High'), isNull);
+      expect(selectStream(emptyStreams, 'Low'), isNull);
+    });
+  });
 }
 

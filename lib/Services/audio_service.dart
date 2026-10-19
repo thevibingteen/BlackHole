@@ -259,7 +259,18 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     }).whereType<MediaItem>().distinct().listen(mediaItem.add);
 
     // Propagate all events from the audio player to AudioService clients.
-    _player!.playbackEventStream.listen(_broadcastState);
+    _player!.playbackEventStream.listen(
+      _broadcastState,
+      onError: (Object e, StackTrace st) {
+        Logger.root.severe('Audio player playbackEvent error: $e');
+      },
+    );
+
+    _player!.playerStateStream.listen((state) {
+      Logger.root.info(
+        'Audio player state changed | playing: ${state.playing}, processingState: ${state.processingState}',
+      );
+    });
 
     _player!.shuffleModeEnabledStream
         .listen((enabled) => _broadcastState(_player!.playbackEvent));
@@ -400,21 +411,18 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
       } else {
         if (mediaItem.genre == 'YouTube') {
           final int expiredAt =
-              int.parse((mediaItem.extras!['expire_at'] ?? '0').toString());
-          if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 >
-              expiredAt) {
-            // Logger.root.info(
-            //   'player | youtube link expired for ${mediaItem.title}, searching cache',
-            // );
+              int.tryParse((mediaItem.extras!['expire_at'] ?? '0').toString()) ??
+                  0;
+          final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          if (now + 350 > expiredAt) {
             if (Hive.box('ytlinkcache').containsKey(mediaItem.id)) {
               final Map cachedData =
                   Hive.box('ytlinkcache').get(mediaItem.id) as Map;
               final int cachedExpiredAt =
-                  int.parse(cachedData['expire_at'].toString());
-              if ((DateTime.now().millisecondsSinceEpoch ~/ 1000) + 350 >
-                  cachedExpiredAt) {
+                  int.tryParse(cachedData['expire_at']?.toString() ?? '') ?? 0;
+              if (now + 350 > cachedExpiredAt) {
                 Logger.root.info(
-                  'youtube link expired for ${mediaItem.title}, refreshing',
+                  'youtube link expired in cache for ${mediaItem.title}, refreshing in background',
                 );
                 refreshLinks.add(mediaItem.id);
                 if (!jobRunning) {
@@ -438,12 +446,27 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
               }
             } else {
               Logger.root.info(
-                'youtube link not found in cache for ${mediaItem.title}, refreshing',
+                'youtube link not found in cache for ${mediaItem.title}, refreshing in background',
               );
               refreshLinks.add(mediaItem.id);
               if (!jobRunning) {
                 refreshJob();
               }
+            }
+
+            // Fallback: if background refresh was scheduled but mediaItem has an existing stream URL,
+            // construct the AudioSource so playback does not stall or drop to null.
+            final String existingUrl =
+                mediaItem.extras?['url']?.toString() ?? '';
+            if (audioSource == null && existingUrl.isNotEmpty) {
+              Logger.root.info(
+                'Using existing stream URL as fallback for ${mediaItem.title} while background refresh runs',
+              );
+              final Uri uri = Uri.parse(existingUrl);
+              audioSource =
+                  cacheSong ? LockCachingAudioSource(uri) : AudioSource.uri(uri);
+              _mediaItemExpando[audioSource] = mediaItem;
+              return audioSource;
             }
           } else {
             if (cacheSong) {
