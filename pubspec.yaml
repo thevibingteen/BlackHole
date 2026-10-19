@@ -64,6 +64,9 @@ dev_dependencies:
   lint: ^2.1.2
   msix: ^3.14.2
 
+dependency_overrides:
+  collection: 1.17.1
+
 flutter:
   uses-material-design: true
 
