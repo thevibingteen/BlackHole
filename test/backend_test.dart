@@ -8,36 +8,66 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Lyrics Backend & HTML Rejection Tests', () {
-    test('isHtmlOrChallenge should detect HTML doctype, tags, and challenge pages', () {
-      expect(Lyrics.isHtmlOrChallenge('<!DOCTYPE html><html><body>Error</body></html>'), isTrue);
-      expect(Lyrics.isHtmlOrChallenge('<html lang="en"><head><script src="bot.js"></script></head>'), isTrue);
-      expect(Lyrics.isHtmlOrChallenge('Please complete the captcha below: <div><span class="captcha">'), isTrue);
-      expect(Lyrics.isHtmlOrChallenge('Enable JavaScript to continue to Google Search'), isTrue);
-      expect(Lyrics.isHtmlOrChallenge('<div class="BNeawe">Some scraped text</div>'), isTrue);
+    test(
+        'isHtmlOrChallenge should detect HTML doctype, tags, and challenge pages',
+        () {
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              '<!DOCTYPE html><html><body>Error</body></html>'),
+          isTrue);
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              '<html lang="en"><head><script src="bot.js"></script></head>'),
+          isTrue);
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              'Please complete the captcha below: <div><span class="captcha">'),
+          isTrue);
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              'Enable JavaScript to continue to Google Search'),
+          isTrue);
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              '<div class="BNeawe">Some scraped text</div>'),
+          isTrue);
     });
 
-    test('isHtmlOrChallenge should allow clean plain lyrics and synced LRC lyrics', () {
-      expect(Lyrics.isHtmlOrChallenge('Look at the stars\nLook how they shine for you'), isFalse);
-      expect(Lyrics.isHtmlOrChallenge('[00:35.66] Look at the stars\n[00:38.46] Look how they shine for you'), isFalse);
+    test(
+        'isHtmlOrChallenge should allow clean plain lyrics and synced LRC lyrics',
+        () {
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              'Look at the stars\nLook how they shine for you'),
+          isFalse);
+      expect(
+          Lyrics.isHtmlOrChallenge(
+              '[00:35.66] Look at the stars\n[00:38.46] Look how they shine for you'),
+          isFalse);
       expect(Lyrics.isHtmlOrChallenge(''), isFalse);
     });
 
-    test('getGoogleLyrics rejects HTML challenge pages and returns empty string', () async {
+    test(
+        'getGoogleLyrics rejects HTML challenge pages and returns empty string',
+        () async {
       // Even if Google search returns an HTML document or bot challenge, it must never return HTML
-      const htmlChallenge = '<!DOCTYPE html><html><head><title>Bot Check</title></head><body>Please solve captcha</body></html>';
+      const htmlChallenge =
+          '<!DOCTYPE html><html><head><title>Bot Check</title></head><body>Please solve captcha</body></html>';
       expect(Lyrics.isHtmlOrChallenge(htmlChallenge), isTrue);
     });
   });
 
   group('JioSaavn Formatting Tests', () {
-    test('formatHomePageData safely handles empty modules and sets collections', () async {
+    test('formatHomePageData safely handles empty modules and sets collections',
+        () async {
       final input = {
         'modules': {},
       };
       final formatted = await FormatResponse.formatHomePageData(input);
       expect(formatted, isA<Map>());
       expect(formatted['collections'], isA<List>());
-      expect((formatted['collections'] as List).contains('new_trending'), isTrue);
+      expect(
+          (formatted['collections'] as List).contains('new_trending'), isTrue);
     });
 
     test('formatHomePageData safely formats modules with items', () async {
@@ -62,12 +92,15 @@ void main() {
       };
       final formatted = await FormatResponse.formatHomePageData(input);
       expect(formatted['collections'], isA<List>());
-      expect((formatted['collections'] as List).contains('top_playlists'), isTrue);
+      expect(
+          (formatted['collections'] as List).contains('top_playlists'), isTrue);
       expect(formatted['top_playlists'], isA<List>());
-      expect((formatted['top_playlists'] as List).first['title'], equals('Top Hindi Hits'));
+      expect((formatted['top_playlists'] as List).first['title'],
+          equals('Top Hindi Hits'));
     });
 
-    test('formatSingleSongResponse sets valid media URLs and formats metadata', () async {
+    test('formatSingleSongResponse sets valid media URLs and formats metadata',
+        () async {
       final rawSong = {
         'id': 'song_1',
         'song': 'Kesariya',
@@ -163,7 +196,9 @@ void main() {
       expect(RegExp(r'^[A-Za-z0-9\-._~]+$').hasMatch(verifier1), isTrue);
     });
 
-    test('generateCodeChallenge generates valid unpadded Base64URL SHA-256 challenge', () {
+    test(
+        'generateCodeChallenge generates valid unpadded Base64URL SHA-256 challenge',
+        () {
       const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
       final challenge = SpotifyApi.generateCodeChallenge(verifier);
       expect(challenge, isNotEmpty);
@@ -193,9 +228,12 @@ void main() {
   });
 
   group('Lyrics UTF-8 Character Encoding Tests', () {
-    test('utf8.decode prevents Latin-1 mojibake for Hindi Devanagari lyrics', () {
-      const hindiLyricText = 'मुस्कुराने की वजह तुम हो\nगुनगुनाने की वजह तुम हो';
-      final encodedBytes = utf8.encode(jsonEncode({'plainLyrics': hindiLyricText}));
+    test('utf8.decode prevents Latin-1 mojibake for Hindi Devanagari lyrics',
+        () {
+      const hindiLyricText =
+          'मुस्कुराने की वजह तुम हो\nगुनगुनाने की वजह तुम हो';
+      final encodedBytes =
+          utf8.encode(jsonEncode({'plainLyrics': hindiLyricText}));
 
       // Simulating naive response.body behavior (Latin-1 fallback when charset is omitted)
       final naiveDecoded = latin1.decode(encodedBytes);
@@ -210,37 +248,47 @@ void main() {
       expect(parsed['plainLyrics'].contains('à¤'), isFalse);
     });
 
-    test('synced LRC lyrics with Hindi text decode cleanly with timestamps', () {
-      const syncedHindi = '[00:15.30] मुस्कुराने की वजह तुम हो\n[00:20.45] जिया जाए ना, जाए ना, जाए ना';
-      final encodedBytes = utf8.encode(jsonEncode({'syncedLyrics': syncedHindi, 'plainLyrics': ''}));
+    test('synced LRC lyrics with Hindi text decode cleanly with timestamps',
+        () {
+      const syncedHindi =
+          '[00:15.30] मुस्कुराने की वजह तुम हो\n[00:20.45] जिया जाए ना, जाए ना, जाए ना';
+      final encodedBytes = utf8
+          .encode(jsonEncode({'syncedLyrics': syncedHindi, 'plainLyrics': ''}));
       final decoded = jsonDecode(utf8.decode(encodedBytes)) as Map;
       expect(decoded['syncedLyrics'], equals(syncedHindi));
-      expect(Lyrics.isHtmlOrChallenge(decoded['syncedLyrics'] as String), isFalse);
+      expect(
+          Lyrics.isHtmlOrChallenge(decoded['syncedLyrics'] as String), isFalse);
     });
   });
 
   group('JioSaavn URI Construction & Endpoint Tests', () {
-    test('Uri.parse preserves query string without encoding ? as %3F in path', () {
+    test('Uri.parse preserves query string without encoding ? as %3F in path',
+        () {
       const baseUrl = 'www.jiosaavn.com';
-      const apiStr = '/api.php?_format=json&_marker=0&api_version=4&ctx=web6dot0';
+      const apiStr =
+          '/api.php?_format=json&_marker=0&api_version=4&ctx=web6dot0';
       const params = '__call=webapi.getLaunchData';
 
       // Buggy baseline Uri.https:
       final buggyUri = Uri.https(baseUrl, '$apiStr&$params');
-      expect(buggyUri.path.contains('%3F'), isTrue); // Broken! %3F causes 403 Forbidden!
+      expect(buggyUri.path.contains('%3F'),
+          isTrue); // Broken! %3F causes 403 Forbidden!
       expect(buggyUri.query, isEmpty);
 
       // Fixed Uri.parse:
       final fixedUri = Uri.parse('https://$baseUrl$apiStr&$params');
       expect(fixedUri.path, equals('/api.php')); // Clean path!
       expect(fixedUri.queryParameters['_format'], equals('json'));
-      expect(fixedUri.queryParameters['__call'], equals('webapi.getLaunchData'));
+      expect(
+          fixedUri.queryParameters['__call'], equals('webapi.getLaunchData'));
       expect(fixedUri.toString().contains('%3F'), isFalse);
     });
   });
 
   group('YouTube /music Feed & Modern Lockup Parsing Tests', () {
-    test('parses richShelfRenderer with lockupViewModel into home shelf playlists', () {
+    test(
+        'parses richShelfRenderer with lockupViewModel into home shelf playlists',
+        () {
       final mockData = {
         'contents': {
           'twoColumnBrowseResultsRenderer': {
@@ -263,14 +311,19 @@ void main() {
                                           'contentId': 'PL1234567890',
                                           'metadata': {
                                             'lockupMetadataViewModel': {
-                                              'title': {'content': 'Bollywood Hitlist'},
+                                              'title': {
+                                                'content': 'Bollywood Hitlist'
+                                              },
                                               'metadata': {
                                                 'contentMetadataViewModel': {
                                                   'metadataRows': [
                                                     {
                                                       'metadataParts': [
                                                         {
-                                                          'text': {'content': 'Top Trending Bollywood'}
+                                                          'text': {
+                                                            'content':
+                                                                'Top Trending Bollywood'
+                                                          }
                                                         }
                                                       ]
                                                     }
@@ -283,7 +336,10 @@ void main() {
                                             'thumbnailViewModel': {
                                               'image': {
                                                 'sources': [
-                                                  {'url': 'https://i.ytimg.com/vi/test/hqdefault.jpg'}
+                                                  {
+                                                    'url':
+                                                        'https://i.ytimg.com/vi/test/hqdefault.jpg'
+                                                  }
                                                 ]
                                               }
                                             }
@@ -321,7 +377,9 @@ void main() {
         }
       };
 
-      final tabs = mockData['contents']!['twoColumnBrowseResultsRenderer']!['tabs']! as List;
+      final tabs =
+          mockData['contents']!['twoColumnBrowseResultsRenderer']!['tabs']!
+              as List;
       final tabContent = (tabs[0] as Map)['tabRenderer']['content'] as Map;
       final gridContents = tabContent['richGridRenderer']['contents'] as List;
       final shelves = [];
@@ -335,10 +393,14 @@ void main() {
             if (lvm != null) {
               final meta = lvm['metadata']?['lockupMetadataViewModel'];
               final itemTitle = meta?['title']?['content'] ?? '';
-              final cmd = lvm['rendererContext']?['commandContext']?['onTap']?['innertubeCommand'];
-              final playlistId = cmd?['watchPlaylistEndpoint']?['playlistId'] ?? lvm['contentId'];
+              final cmd = lvm['rendererContext']?['commandContext']?['onTap']
+                  ?['innertubeCommand'];
+              final playlistId = cmd?['watchPlaylistEndpoint']?['playlistId'] ??
+                  lvm['contentId'];
               final videoId = cmd?['watchEndpoint']?['videoId'] ?? '';
-              final imgSources = lvm['contentImage']?['thumbnailViewModel']?['image']?['sources'] as List? ?? [];
+              final imgSources = lvm['contentImage']?['thumbnailViewModel']
+                      ?['image']?['sources'] as List? ??
+                  [];
               final img = imgSources.isNotEmpty ? imgSources.last['url'] : '';
               items.add({
                 'title': itemTitle,
@@ -354,14 +416,19 @@ void main() {
 
       expect(shelves.length, equals(1));
       expect(shelves.first['title'], equals("India's Biggest Hits"));
-      expect((shelves.first['playlists'] as List).first['title'], equals('Bollywood Hitlist'));
-      expect((shelves.first['playlists'] as List).first['playlistId'], equals('PL1234567890'));
-      expect((shelves.first['playlists'] as List).first['firstItemId'], equals('vid_first_123'));
+      expect((shelves.first['playlists'] as List).first['title'],
+          equals('Bollywood Hitlist'));
+      expect((shelves.first['playlists'] as List).first['playlistId'],
+          equals('PL1234567890'));
+      expect((shelves.first['playlists'] as List).first['firstItemId'],
+          equals('vid_first_123'));
     });
   });
 
   group('Spotify Track / Items Filtering Tests', () {
-    test('filters out null track entries and sanitizes track items for top charts', () {
+    test(
+        'filters out null track entries and sanitizes track items for top charts',
+        () {
       final rawSpotifyItems = [
         {
           'track': {
@@ -375,9 +442,7 @@ void main() {
             'artists': [
               {'name': 'Artist A'}
             ],
-            'external_urls': {
-              'spotify': 'https://open.spotify.com/track/123'
-            }
+            'external_urls': {'spotify': 'https://open.spotify.com/track/123'}
           }
         },
         {
@@ -389,7 +454,9 @@ void main() {
           'track': {
             'name': 'Podcast Episode',
             'album': {'images': []},
-            'artists': [{'name': 'Host'}]
+            'artists': [
+              {'name': 'Host'}
+            ]
           }
         }
       ];
@@ -414,7 +481,8 @@ void main() {
 
   group('YouTube Stream Expiry & URI Validation Tests', () {
     test('extracts expire timestamp from signed stream URL correctly', () {
-      const sampleUrl = 'https://rr4---sn-5hnekne6.googlevideo.com/videoplayback?expire=1760720400&ei=abcd&ip=1.2.3.4&id=o-ABCD&itag=140';
+      const sampleUrl =
+          'https://rr4---sn-5hnekne6.googlevideo.com/videoplayback?expire=1760720400&ei=abcd&ip=1.2.3.4&id=o-ABCD&itag=140';
       final match = RegExp(r'expire=([0-9]+)').firstMatch(sampleUrl);
       expect(match, isNotNull);
       expect(match!.group(1), equals('1760720400'));
@@ -423,16 +491,21 @@ void main() {
     });
 
     test('detects expired stream timestamp against current epoch', () {
-      final int pastExpire = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - 300;
-      final String pastUrl = 'https://googlevideo.com/videoplayback?expire=$pastExpire&id=123';
+      final int pastExpire =
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000) - 300;
+      final String pastUrl =
+          'https://googlevideo.com/videoplayback?expire=$pastExpire&id=123';
       final match = RegExp(r'expire=([0-9]+)').firstMatch(pastUrl);
       expect(match, isNotNull);
       final int expireTime = int.parse(match!.group(1)!);
-      final bool isExpired = DateTime.now().millisecondsSinceEpoch ~/ 1000 > expireTime;
+      final bool isExpired =
+          DateTime.now().millisecondsSinceEpoch ~/ 1000 > expireTime;
       expect(isExpired, isTrue);
     });
 
-    test('handles URLs without expire parameter safely without throwing exceptions', () {
+    test(
+        'handles URLs without expire parameter safely without throwing exceptions',
+        () {
       const urlWithoutExpire = 'https://example.com/stream.mp4';
       final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithoutExpire);
       expect(match, isNull);
@@ -440,7 +513,9 @@ void main() {
   });
 
   group('Playback Stats Counting & Semantics Tests', () {
-    test('tracks and increments playCount for local songs regardless of artUri scheme', () {
+    test(
+        'tracks and increments playCount for local songs regardless of artUri scheme',
+        () {
       final Map<String, dynamic> fakeStatsBox = {};
       final localSong1 = {
         'id': 'local_file_1',
@@ -452,15 +527,18 @@ void main() {
       // Function simulating addRecentlyPlayed logic from AudioPlayerHandlerImpl
       void trackPlay(Map song) {
         final String id = song['id'] as String;
-        final Map songStats = Map<String, dynamic>.from(fakeStatsBox[id] as Map? ?? {});
+        final Map songStats =
+            Map<String, dynamic>.from(fakeStatsBox[id] as Map? ?? {});
         songStats['playCount'] = ((songStats['playCount'] as int?) ?? 0) + 1;
         songStats['title'] = song['title'];
         songStats['artist'] = song['artist'];
         songStats['id'] = id;
         fakeStatsBox[id] = songStats;
 
-        final Map mostPlayed = Map<String, dynamic>.from(fakeStatsBox['mostPlayed'] as Map? ?? {});
-        if ((songStats['playCount'] as int) > ((mostPlayed['playCount'] as int?) ?? 0)) {
+        final Map mostPlayed =
+            Map<String, dynamic>.from(fakeStatsBox['mostPlayed'] as Map? ?? {});
+        if ((songStats['playCount'] as int) >
+            ((mostPlayed['playCount'] as int?) ?? 0)) {
           fakeStatsBox['mostPlayed'] = songStats;
         }
       }
@@ -502,7 +580,9 @@ void main() {
       expect(result, isNull);
     });
 
-    test('returns null gracefully on item with missing runs or navigation endpoints', () {
+    test(
+        'returns null gracefully on item with missing runs or navigation endpoints',
+        () {
       final service = YtMusicService();
       final malformedItem = {
         'musicResponsiveListItemRenderer': {
@@ -519,7 +599,8 @@ void main() {
       expect(result, isNull);
     });
 
-    test('handles empty or non-200 responses without uncaught errors', () async {
+    test('handles empty or non-200 responses without uncaught errors',
+        () async {
       final service = YtMusicService();
       // Test search with invalid endpoint
       final emptyResult = await service.sendRequest(
@@ -533,13 +614,17 @@ void main() {
   });
 
   group('JioSaavn DES Decryption & Song Formatting Tests', () {
-    test('FormatResponse.decode gracefully handles malformed or non-base64 strings', () {
+    test(
+        'FormatResponse.decode gracefully handles malformed or non-base64 strings',
+        () {
       expect(FormatResponse.decode('not_valid_base64!!!'), equals(''));
       expect(FormatResponse.decode(''), equals(''));
       expect(FormatResponse.decode('===invalid==='), equals(''));
     });
 
-    test('formatSingleSongResponse falls back through artist hierarchy gracefully', () async {
+    test(
+        'formatSingleSongResponse falls back through artist hierarchy gracefully',
+        () async {
       // 1. subtitle fallback
       final songWithSubtitle = {
         'id': 'sub_1',
@@ -547,7 +632,8 @@ void main() {
         'subtitle': 'Subtitle Artist',
         'more_info': <String, dynamic>{},
       };
-      final res1 = await FormatResponse.formatSingleSongResponse(songWithSubtitle);
+      final res1 =
+          await FormatResponse.formatSingleSongResponse(songWithSubtitle);
       expect(res1['artist'], equals('Subtitle Artist'));
 
       // 2. Unknown fallback
@@ -556,17 +642,18 @@ void main() {
         'song': 'Anonymous Song',
         'more_info': <String, dynamic>{},
       };
-      final res2 = await FormatResponse.formatSingleSongResponse(songWithNoArtist);
+      final res2 =
+          await FormatResponse.formatSingleSongResponse(songWithNoArtist);
       expect(res2['artist'], equals('Unknown'));
     });
   });
 
   group('Download Quality & Bitrate Replacement Tests', () {
-    String resolveDownloadUrl(String rawUrl, String preferredQuality, bool has320) {
-      final String quality =
-          (preferredQuality == '320 kbps' && !has320)
-              ? '160'
-              : preferredQuality.replaceAll(' kbps', '');
+    String resolveDownloadUrl(
+        String rawUrl, String preferredQuality, bool has320) {
+      final String quality = (preferredQuality == '320 kbps' && !has320)
+          ? '160'
+          : preferredQuality.replaceAll(' kbps', '');
       return rawUrl.replaceAll(
         RegExp(r'_(48|96|160|320)\.'),
         '_$quality.',
@@ -579,7 +666,9 @@ void main() {
       expect(resolved, equals('https://aac.saavncdn.com/123/sample_320.mp4'));
     });
 
-    test('falls back to 160 kbps when user selects 320 kbps but song lacks 320kbps', () {
+    test(
+        'falls back to 160 kbps when user selects 320 kbps but song lacks 320kbps',
+        () {
       const originalUrl = 'https://aac.saavncdn.com/123/sample_96.mp4';
       final resolved = resolveDownloadUrl(originalUrl, '320 kbps', false);
       expect(resolved, equals('https://aac.saavncdn.com/123/sample_160.mp4'));
@@ -593,7 +682,8 @@ void main() {
   });
 
   group('YouTube Stream & Cache Expiry Handling Tests', () {
-    test('extracts expiration timestamp from YouTube stream URLs correctly', () {
+    test('extracts expiration timestamp from YouTube stream URLs correctly',
+        () {
       const urlWithExpire =
           'https://rr4---sn-ci5gup-c35e.googlevideo.com/videoplayback?expire=1776543210&ei=test&ip=1.2.3.4';
       final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithExpire);
@@ -602,7 +692,8 @@ void main() {
       expect(parsedExpire, equals(1776543210));
     });
 
-    test('falls back to default expiration when expire parameter is absent', () {
+    test('falls back to default expiration when expire parameter is absent',
+        () {
       const urlWithoutExpire = 'https://example.com/audio.mp4';
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithoutExpire);
@@ -612,7 +703,8 @@ void main() {
       expect(parsedExpire, greaterThanOrEqualTo(now + 17990));
     });
 
-    test('cache hit evaluation correctly distinguishes valid vs expired cache', () {
+    test('cache hit evaluation correctly distinguishes valid vs expired cache',
+        () {
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
       // 1. Valid cache: expires in 3600 seconds
@@ -631,7 +723,9 @@ void main() {
       expect(isExpired, isFalse);
     });
 
-    test('quality selection chooses last stream for High and first stream for Low', () {
+    test(
+        'quality selection chooses last stream for High and first stream for Low',
+        () {
       final List<String> streams = [
         'https://stream.googlevideo.com/audio_low_48k',
         'https://stream.googlevideo.com/audio_medium_96k',
@@ -641,7 +735,8 @@ void main() {
       final String highChoice = streams.last;
       final String lowChoice = streams.first;
 
-      expect(highChoice, equals('https://stream.googlevideo.com/audio_high_160k'));
+      expect(
+          highChoice, equals('https://stream.googlevideo.com/audio_high_160k'));
       expect(lowChoice, equals('https://stream.googlevideo.com/audio_low_48k'));
     });
 
@@ -685,5 +780,153 @@ void main() {
       expect(selectStream(emptyStreams, 'Low'), isNull);
     });
   });
-}
 
+  group('Lyrics Title and Artist Sanitization Tests', () {
+    test('cleanSongTitle removes movie/version tags and brackets cleanly', () {
+      expect(
+        Lyrics.cleanSongTitle('Kesariya (From "Brahmastra")'),
+        equals('Kesariya'),
+      );
+      expect(
+        Lyrics.cleanSongTitle('Believer [Official Music Video]'),
+        equals('Believer'),
+      );
+      expect(
+        Lyrics.cleanSongTitle('Shape of You (Official Lyric Video)'),
+        equals('Shape of You'),
+      );
+      expect(
+        Lyrics.cleanSongTitle('Despacito (feat. Daddy Yankee)'),
+        equals('Despacito'),
+      );
+      expect(
+        Lyrics.cleanSongTitle('Song Name - Official Video'),
+        equals('Song Name'),
+      );
+      expect(
+        Lyrics.cleanSongTitle('Song Name | 4K Video'),
+        equals('Song Name'),
+      );
+      expect(
+        Lyrics.cleanSongTitle('Plain Title'),
+        equals('Plain Title'),
+      );
+    });
+
+    test('cleanArtistName extracts primary artist cleanly', () {
+      expect(
+        Lyrics.cleanArtistName('Arijit Singh, Pritam, Amitabh Bhattacharya'),
+        equals('Arijit Singh'),
+      );
+      expect(
+        Lyrics.cleanArtistName('Arijit Singh & Pritam'),
+        equals('Arijit Singh'),
+      );
+      expect(
+        Lyrics.cleanArtistName('Ed Sheeran feat. Justin Bieber'),
+        equals('Ed Sheeran'),
+      );
+      expect(
+        Lyrics.cleanArtistName('Taylor Swift ft. Post Malone'),
+        equals('Taylor Swift'),
+      );
+      expect(
+        Lyrics.cleanArtistName('Coldplay'),
+        equals('Coldplay'),
+      );
+    });
+  });
+
+  group('JioSaavn Charts & InnerTube Stream Parsing Tests', () {
+    test('normalizes JioSaavn songs to Top Charts UI item format', () {
+      final mockSaavnSong = {
+        'id': 'saavn_123',
+        'title': 'Chaleya',
+        'artist': 'Anirudh Ravichander, Arijit Singh',
+        'image': 'https://c.saavncdn.com/123.jpg',
+        'perma_url': 'https://jiosaavn.com/s/chaleya/123',
+        'url': 'https://aac.saavncdn.com/123/audio.mp4',
+        'duration': '200',
+      };
+
+      final normalized = Map<String, dynamic>.from(mockSaavnSong);
+      normalized['name'] = normalized['title'] ?? '';
+      normalized['image_url_small'] = normalized['image'] ?? '';
+      normalized['image_url_big'] = normalized['image'] ?? '';
+      normalized['spotifyUrl'] = normalized['perma_url'] ?? '';
+
+      expect(normalized['name'], equals('Chaleya'));
+      expect(normalized['image_url_small'],
+          equals('https://c.saavncdn.com/123.jpg'));
+      expect(normalized['spotifyUrl'],
+          equals('https://jiosaavn.com/s/chaleya/123'));
+      expect(
+          normalized['url'], equals('https://aac.saavncdn.com/123/audio.mp4'));
+    });
+
+    test(
+        'extracts progressive and adaptive streams from InnerTube player response',
+        () {
+      final mockInnerTube = {
+        'videoDetails': {
+          'videoId': 'BBAyRBTfsOU',
+          'title': 'Vaaste',
+          'author': 'T-Series',
+          'lengthSeconds': '266',
+        },
+        'streamingData': {
+          'formats': [
+            {
+              'itag': 18,
+              'mimeType': 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+              'url':
+                  'https://stream.googlevideo.com/videoplayback?expire=1792445511&itag=18',
+            }
+          ],
+          'adaptiveFormats': [
+            {
+              'itag': 140,
+              'mimeType': 'audio/mp4; codecs="mp4a.40.2"',
+              'url':
+                  'https://stream.googlevideo.com/videoplayback?expire=1792445511&itag=140',
+            }
+          ]
+        }
+      };
+
+      final formats = mockInnerTube['streamingData']!['formats'] as List;
+      final adaptiveFormats =
+          mockInnerTube['streamingData']!['adaptiveFormats'] as List;
+      final List<String> urls = [];
+
+      for (final f in adaptiveFormats) {
+        if (f['mimeType']?.toString().contains('audio') == true &&
+            f['url'] != null) {
+          urls.add(f['url'].toString());
+        }
+      }
+      for (final f in formats) {
+        if (f['url'] != null) {
+          urls.add(f['url'].toString());
+        }
+      }
+
+      expect(urls.length, equals(2));
+      expect(urls.first, contains('itag=140'));
+      expect(urls.last, contains('itag=18'));
+    });
+
+    test('filters null items safely in queue initialization', () {
+      final rawList = [
+        {'id': '1', 'title': 'Song 1'},
+        null,
+        {'id': '2', 'title': 'Song 2'},
+        null,
+      ];
+      final filtered = rawList.where((item) => item != null).toList();
+      expect(filtered.length, equals(2));
+      expect(filtered[0]!['id'], equals('1'));
+      expect(filtered[1]!['id'], equals('2'));
+    });
+  });
+}

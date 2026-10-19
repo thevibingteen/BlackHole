@@ -18,6 +18,7 @@
  */
 
 import 'package:app_links/app_links.dart';
+import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/CustomWidgets/custom_physics.dart';
 import 'package:blackhole/CustomWidgets/empty_screen.dart';
@@ -26,10 +27,12 @@ import 'package:blackhole/Helpers/spotify_helper.dart';
 // import 'package:blackhole/Helpers/countrycodes.dart';
 import 'package:blackhole/Screens/Search/search.dart';
 import 'package:blackhole/Screens/Settings/setting.dart';
+import 'package:blackhole/Services/player_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:logging/logging.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 List localSongs = [];
@@ -97,7 +100,7 @@ class _TopChartsState extends State<TopCharts>
             ],
           ),
           title: Text(
-            AppLocalizations.of(context)!.spotifyCharts,
+            'JioSaavn Charts',
             style: TextStyle(
               fontSize: 18,
               color: Theme.of(context).textTheme.bodyLarge!.color,
@@ -162,98 +165,43 @@ class _TopChartsState extends State<TopCharts>
   }
 }
 
-Future<List> getChartDetails(String accessToken, String type) async {
-  final String globalPlaylistId = ConstantCodes.localChartCodes['Global']!;
-  final String localPlaylistId = ConstantCodes.localChartCodes.containsKey(type)
-      ? ConstantCodes.localChartCodes[type]!
-      : ConstantCodes.localChartCodes['India']!;
-  final String playlistId =
-      type == 'Global' ? globalPlaylistId : localPlaylistId;
-  final List data = [];
-  final List tracks =
-      await SpotifyApi().getAllTracksOfPlaylist(accessToken, playlistId);
-  for (final track in tracks) {
-    final trackName = track['track']['name'];
-    final imageUrlSmall = track['track']['album']['images'].last['url'];
-    final imageUrlBig = track['track']['album']['images'].first['url'];
-    final spotifyUrl = track['track']['external_urls']['spotify'];
-    final artistName = track['track']['artists'][0]['name'].toString();
-    data.add({
-      'name': trackName,
-      'artist': artistName,
-      'image_url_small': imageUrlSmall,
-      'image_url_big': imageUrlBig,
-      'spotifyUrl': spotifyUrl,
-    });
+Future<List> getChartDetails(String type) async {
+  final String playlistId = type == 'Global' ? '1134595537' : '1134548194';
+  try {
+    final Map res = await SaavnAPI().fetchPlaylistSongs(playlistId);
+    final List songs = (res['songs'] as List? ?? []);
+    final List data = [];
+    for (final song in songs) {
+      if (song is Map) {
+        final Map item = Map.from(song);
+        item['name'] = item['title'] ?? '';
+        item['image_url_small'] = item['image'] ?? '';
+        item['image_url_big'] = item['image'] ?? '';
+        item['spotifyUrl'] = item['perma_url'] ?? '';
+        data.add(item);
+      }
+    }
+    return data;
+  } catch (e) {
+    Logger.root.severe('Error in getChartDetails ($type): $e');
+    return [];
   }
-  return data;
 }
 
 Future<void> scrapData(String type, {bool signIn = false}) async {
-  final bool spotifySigned =
-      Hive.box('settings').get('spotifySigned', defaultValue: false) as bool;
-
-  if (!spotifySigned && !signIn) {
-    return;
-  }
-  final String? accessToken = await retriveAccessToken();
-  if (accessToken == null) {
-    launchUrl(
-      Uri.parse(
-        SpotifyApi().requestAuthorization(),
-      ),
-      mode: LaunchMode.externalApplication,
-    );
-    final appLinks = AppLinks();
-    appLinks.allUriLinkStream.listen(
-      (uri) async {
-        final link = uri.toString();
-        if (link.contains('code=')) {
-          final code = link.split('code=')[1];
-          Hive.box('settings').put('spotifyAppCode', code);
-          final currentTime = DateTime.now().millisecondsSinceEpoch / 1000;
-          final List<String> data =
-              await SpotifyApi().getAccessToken(code: code);
-          if (data.isNotEmpty) {
-            Hive.box('settings').put('spotifyAccessToken', data[0]);
-            Hive.box('settings').put('spotifyRefreshToken', data[1]);
-            Hive.box('settings').put('spotifySigned', true);
-            Hive.box('settings')
-                .put('spotifyTokenExpireAt', currentTime + int.parse(data[2]));
-          }
-
-          final temp = await getChartDetails(data[0], type);
-          if (temp.isNotEmpty) {
-            Hive.box('cache').put('${type}_chart', temp);
-            if (type == 'Global') {
-              globalSongs = temp;
-            } else {
-              localSongs = temp;
-            }
-          }
-          if (type == 'Global') {
-            globalFetchFinished.value = true;
-          } else {
-            localFetchFinished.value = true;
-          }
-        }
-      },
-    );
-  } else {
-    final temp = await getChartDetails(accessToken, type);
-    if (temp.isNotEmpty) {
-      Hive.box('cache').put('${type}_chart', temp);
-      if (type == 'Global') {
-        globalSongs = temp;
-      } else {
-        localSongs = temp;
-      }
-    }
+  final temp = await getChartDetails(type);
+  if (temp.isNotEmpty) {
+    await Hive.box('cache').put('${type}_chart', temp);
     if (type == 'Global') {
-      globalFetchFinished.value = true;
+      globalSongs = temp;
     } else {
-      localFetchFinished.value = true;
+      localSongs = temp;
     }
+  }
+  if (type == 'Global') {
+    globalFetchFinished.value = true;
+  } else {
+    localFetchFinished.value = true;
   }
 }
 
@@ -306,19 +254,7 @@ class _TopPageState extends State<TopPage>
         final List showList = isGlobal ? globalSongs : localSongs;
         return Column(
           children: [
-            if (!(Hive.box('settings').get('spotifySigned', defaultValue: false)
-                as bool))
-              Expanded(
-                child: Center(
-                  child: TextButton(
-                    onPressed: () {
-                      scrapData(widget.type, signIn: true);
-                    },
-                    child: Text(AppLocalizations.of(context)!.signInSpotify),
-                  ),
-                ),
-              )
-            else if (showList.isEmpty)
+            if (showList.isEmpty)
               Expanded(
                 child: value
                     ? emptyScreen(
@@ -416,13 +352,14 @@ class _TopPageState extends State<TopPage>
                         ],
                       ),
                       onTap: () {
-                        Navigator.push(
+                        PlayerInvoke.init(
+                          songsList: showList,
+                          index: index,
+                          isOffline: false,
+                        );
+                        Navigator.pushNamed(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => SearchPage(
-                              query: showList[index]['name'].toString(),
-                            ),
-                          ),
+                          '/player',
                         );
                       },
                     );

@@ -78,11 +78,6 @@ class YouTubeServices {
         'formatVideoFromId | id: $id, entryPoint: $entryPoint, title: "$videoTitle", getUrl: $getUrl',
       );
 
-      final Video? vid = await getVideoFromId(id);
-      if (vid == null) {
-        Logger.root.warning('getVideoFromId returned null for $id');
-        return null;
-      }
       String quality = 'Low';
       if (Hive.isBoxOpen('settings')) {
         quality = Hive.box('settings')
@@ -92,13 +87,33 @@ class YouTubeServices {
             )
             .toString();
       }
-      final Map? response = await formatVideo(
-        video: vid,
-        quality: quality,
-        data: data,
-        getUrl: getUrl ?? true,
-      );
-      return response;
+
+      final Video? vid = await getVideoFromId(id);
+      if (vid != null) {
+        final Map? response = await formatVideo(
+          video: vid,
+          quality: quality,
+          data: data,
+          getUrl: getUrl ?? true,
+        );
+        if (response != null) {
+          return response;
+        }
+      }
+
+      // If getVideoFromId failed or formatVideo returned null, resolve directly via InnerTube
+      if (getUrl ?? true) {
+        Logger.root.info(
+          'formatVideoFromId | falling back to InnerTube stream resolution for $id',
+        );
+        return await formatVideoFromInnerTube(
+          id: id,
+          quality: quality,
+          data: data,
+        );
+      }
+
+      return null;
     } catch (e) {
       Logger.root.severe('Error in formatVideoFromId for $id: $e');
       return null;
@@ -107,10 +122,6 @@ class YouTubeServices {
 
   Future<Map?> refreshLink(String id) async {
     try {
-      final Video? res = await getVideoFromId(id);
-      if (res == null) {
-        return null;
-      }
       String quality = 'Low';
       if (Hive.isBoxOpen('settings')) {
         quality = Hive.box('settings')
@@ -124,8 +135,17 @@ class YouTubeServices {
       Logger.root.info(
         'refreshLink | id: $id, cache invalidated, resolving fresh stream (quality: $quality)',
       );
-      final Map? data = await formatVideo(video: res, quality: quality);
-      return data;
+
+      final Video? res = await getVideoFromId(id);
+      if (res != null) {
+        final Map? data = await formatVideo(video: res, quality: quality);
+        if (data != null) {
+          return data;
+        }
+      }
+
+      // Fall back to direct InnerTube stream resolution
+      return await formatVideoFromInnerTube(id: id, quality: quality);
     } catch (e) {
       Logger.root.severe('Error in refreshLink for $id: $e');
       return null;
@@ -152,7 +172,8 @@ class YouTubeServices {
       final Response response = await get(link, headers: headers)
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
-        Logger.root.warning('getMusicHome returned HTTP ${response.statusCode}');
+        Logger.root
+            .warning('getMusicHome returned HTTP ${response.statusCode}');
         return {};
       }
 
@@ -186,7 +207,8 @@ class YouTubeServices {
       }
 
       if (data == null) {
-        Logger.root.warning('Could not extract JSON data from YouTube /music page');
+        Logger.root
+            .warning('Could not extract JSON data from YouTube /music page');
         return {};
       }
 
@@ -246,13 +268,13 @@ class YouTubeServices {
 
                 // Image thumbnail
                 List imgSources = lvm['contentImage']
-                            ?['collectionThumbnailViewModel']
-                        ?['primaryThumbnail']?['thumbnailViewModel']?['image']
-                    ?['sources'] as List? ??
+                                ?['collectionThumbnailViewModel']
+                            ?['primaryThumbnail']?['thumbnailViewModel']
+                        ?['image']?['sources'] as List? ??
                     [];
                 if (imgSources.isEmpty) {
                   imgSources = lvm['contentImage']?['thumbnailViewModel']
-                      ?['image']?['sources'] as List? ??
+                          ?['image']?['sources'] as List? ??
                       [];
                 }
                 final String imgUrl = imgSources.isNotEmpty
@@ -293,20 +315,22 @@ class YouTubeServices {
           }
         }
       } catch (e) {
-        Logger.root.warning('Error parsing richGridRenderer in getMusicHome: $e');
+        Logger.root
+            .warning('Error parsing richGridRenderer in getMusicHome: $e');
       }
 
       // B. If modern parser yielded nothing, fallback to legacy sectionListRenderer
       if (finalResult.isEmpty) {
         try {
-          final List result = data['contents']?['twoColumnBrowseResultsRenderer']
-                  ?['tabs']?[0]?['tabRenderer']?['content']?['sectionListRenderer']
-              ?['contents'] as List? ??
+          final List result = data['contents']
+                          ?['twoColumnBrowseResultsRenderer']?['tabs']?[0]
+                      ?['tabRenderer']?['content']?['sectionListRenderer']
+                  ?['contents'] as List? ??
               [];
 
           final List headResult = data['header']?['carouselHeaderRenderer']
-                  ?['contents']?[0]?['carouselItemRenderer']?['carouselItems']
-              as List? ??
+                      ?['contents']?[0]?['carouselItemRenderer']
+                  ?['carouselItems'] as List? ??
               [];
 
           final List shelfRenderer = result
@@ -324,15 +348,15 @@ class YouTubeServices {
             final List items = element['content']?['horizontalListRenderer']
                     ?['items'] as List? ??
                 [];
-            final playlistItems = (title.trim() == 'Charts' ||
-                    title.trim() == 'Classements')
-                ? formatChartItems(items)
-                : (title.contains('Music Videos') ||
-                        title.contains('Nouveaux clips') ||
-                        title.contains('En Musique Avec Moi') ||
-                        title.contains('Performances Uniques'))
-                    ? formatVideoItems(items)
-                    : formatItems(items);
+            final playlistItems =
+                (title.trim() == 'Charts' || title.trim() == 'Classements')
+                    ? formatChartItems(items)
+                    : (title.contains('Music Videos') ||
+                            title.contains('Nouveaux clips') ||
+                            title.contains('En Musique Avec Moi') ||
+                            title.contains('Performances Uniques'))
+                        ? formatVideoItems(items)
+                        : formatItems(items);
             if (playlistItems.isNotEmpty) {
               finalResult.add({
                 'title': title,
@@ -358,8 +382,8 @@ class YouTubeServices {
         'https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=';
     final Uri link = Uri.parse(baseUrl + query);
     try {
-      final Response response =
-          await get(link, headers: headers).timeout(const Duration(seconds: 10));
+      final Response response = await get(link, headers: headers)
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
         return [];
       }
@@ -474,25 +498,25 @@ class YouTubeServices {
         return {
           'title': e['defaultPromoPanelRenderer']['title']['runs'][0]['text'],
           'type': 'video',
-          'description': (e['defaultPromoPanelRenderer']['description']['runs']
-                  as List)
-              .map((e) => e['text'])
-              .toList()
-              .join(),
+          'description':
+              (e['defaultPromoPanelRenderer']['description']['runs'] as List)
+                  .map((e) => e['text'])
+                  .toList()
+                  .join(),
           'navigationEndpoint': e['defaultPromoPanelRenderer']
               ['navigationEndpoint']['watchEndpoint']['videoId'],
           'image': e['defaultPromoPanelRenderer']
-                  ['largeFormFactorBackgroundThumbnail']
-              ['thumbnailLandscapePortraitRenderer']['landscape']['thumbnails'][0]
-              ['url'],
+                      ['largeFormFactorBackgroundThumbnail']
+                  ['thumbnailLandscapePortraitRenderer']['landscape']
+              ['thumbnails'][0]['url'],
           'imageMedium': e['defaultPromoPanelRenderer']
-                  ['largeFormFactorBackgroundThumbnail']
-              ['thumbnailLandscapePortraitRenderer']['landscape']['thumbnails'][1]
-              ['url'],
+                      ['largeFormFactorBackgroundThumbnail']
+                  ['thumbnailLandscapePortraitRenderer']['landscape']
+              ['thumbnails'][1]['url'],
           'imageStandard': e['defaultPromoPanelRenderer']
-                  ['largeFormFactorBackgroundThumbnail']
-              ['thumbnailLandscapePortraitRenderer']['landscape']['thumbnails'][2]
-              ['url'],
+                      ['largeFormFactorBackgroundThumbnail']
+                  ['thumbnailLandscapePortraitRenderer']['landscape']
+              ['thumbnails'][2]['url'],
           'imageMax': e['defaultPromoPanelRenderer']
                           ['largeFormFactorBackgroundThumbnail']
                       ['thumbnailLandscapePortraitRenderer']['landscape']
@@ -514,7 +538,11 @@ class YouTubeServices {
     Map? data,
     bool getUrl = true,
   }) async {
-    if (video.duration?.inSeconds == null) return null;
+    final int? durSec = video.duration?.inSeconds ??
+        int.tryParse(data?['duration']?.toString() ?? '');
+    if (durSec == null && !getUrl) return null;
+    final String durationStr = (durSec ?? 180).toString();
+
     List<String> urls = [];
     String finalUrl = '';
     String expireAt = '0';
@@ -572,7 +600,7 @@ class YouTubeServices {
 
         if (urls.isNotEmpty) {
           finalUrl = quality == 'High' ? urls.last : urls.first;
-          final match = RegExp(r'expire=([0-9]+)').firstMatch(finalUrl);
+          final match = RegExp('expire=([0-9]+)').firstMatch(finalUrl);
           final int parsedExpire = match != null
               ? (int.tryParse(match.group(1)!) ?? (now + 18000))
               : (now + 18000);
@@ -611,7 +639,7 @@ class YouTubeServices {
       'album': (data?['album'] ?? '') != ''
           ? data!['album']
           : video.author.replaceAll('- Topic', '').trim(),
-      'duration': video.duration?.inSeconds.toString(),
+      'duration': durationStr,
       'title':
           (data?['title'] ?? '') != '' ? data!['title'] : video.title.trim(),
       'artist': (data?['artist'] ?? '') != ''
@@ -674,8 +702,270 @@ class YouTubeServices {
     }
   }
 
+  Future<Map<String, dynamic>?> _requestInnerTubePlayer(String videoId) async {
+    try {
+      final Uri uri = Uri.parse('https://www.youtube.com/youtubei/v1/player');
+      final body = json.encode({
+        'videoId': videoId,
+        'context': {
+          'client': {
+            'clientName': 'ANDROID',
+            'clientVersion': '21.26.364',
+            'androidSdkVersion': 30,
+            'userAgent':
+                'com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip',
+            'osName': 'Android',
+            'osVersion': '11',
+            'hl': 'en',
+            'gl': 'US',
+          },
+        },
+        'contentCheckOk': true,
+        'racyCheckOk': true,
+      });
+
+      final headers = {
+        'Content-Type': 'application/json',
+        'User-Agent':
+            'com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip',
+        'X-YouTube-Client-Name': '3',
+        'X-YouTube-Client-Version': '21.26.364',
+      };
+
+      final Response res = await post(uri, headers: headers, body: body)
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        return json.decode(res.body) as Map<String, dynamic>?;
+      } else {
+        Logger.root.warning(
+          'InnerTube player returned HTTP ${res.statusCode} for $videoId',
+        );
+      }
+    } catch (e) {
+      Logger.root.severe('Error in _requestInnerTubePlayer for $videoId: $e');
+    }
+    return null;
+  }
+
+  Future<List<String>> fetchStreamsFromInnerTube(String videoId) async {
+    final Map<String, dynamic>? data = await _requestInnerTubePlayer(videoId);
+    if (data == null) return [];
+
+    final Map<String, dynamic>? streamingData =
+        data['streamingData'] as Map<String, dynamic>?;
+    if (streamingData == null) return [];
+
+    final List formats = streamingData['formats'] as List? ?? [];
+    final List adaptiveFormats =
+        streamingData['adaptiveFormats'] as List? ?? [];
+
+    final List<String> urls = [];
+
+    // Prioritize direct audio streams from adaptiveFormats if any has direct url
+    for (final f in adaptiveFormats) {
+      if (f is Map &&
+          f['mimeType']?.toString().contains('audio') == true &&
+          f['url'] != null &&
+          f['url'].toString().isNotEmpty) {
+        urls.add(f['url'].toString());
+      }
+    }
+
+    // Also collect progressive formats (itag 18 mp4 with AAC audio)
+    for (final f in formats) {
+      if (f is Map && f['url'] != null && f['url'].toString().isNotEmpty) {
+        urls.add(f['url'].toString());
+      }
+    }
+
+    if (urls.isEmpty) return [];
+
+    return [urls.first, urls.last];
+  }
+
+  Future<Map?> formatVideoFromInnerTube({
+    required String id,
+    required String quality,
+    Map? data,
+  }) async {
+    final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    // Check cache first
+    if (Hive.isBoxOpen('ytlinkcache') &&
+        Hive.box('ytlinkcache').containsKey(id)) {
+      final Map? cachedData = Hive.box('ytlinkcache').get(id) as Map?;
+      final int cachedExpiredAt =
+          int.tryParse(cachedData?['expire_at']?.toString() ?? '') ?? 0;
+      final String cachedUrl = cachedData?['url']?.toString() ?? '';
+      final String cachedLow = cachedData?['lowUrl']?.toString() ?? '';
+      final String cachedHigh = cachedData?['highUrl']?.toString() ?? '';
+
+      final bool notExpired = now + 350 <= cachedExpiredAt;
+      final String chosenUrl = (quality == 'High' && cachedHigh.isNotEmpty)
+          ? cachedHigh
+          : (cachedLow.isNotEmpty ? cachedLow : cachedUrl);
+
+      if (chosenUrl.isNotEmpty && notExpired) {
+        Logger.root.info(
+          'formatVideoFromInnerTube | Cache HIT for $id (expires in ${cachedExpiredAt - now}s)',
+        );
+        return {
+          'id': id,
+          'album': data?['album']?.toString() ?? '',
+          'duration': data?['duration']?.toString() ?? '180',
+          'title': data?['title']?.toString() ?? id,
+          'artist': data?['artist']?.toString() ?? '',
+          'image': data?['image']?.toString() ?? '',
+          'secondImage': data?['secondImage']?.toString() ?? '',
+          'language': 'YouTube',
+          'genre': 'YouTube',
+          'expire_at': cachedExpiredAt.toString(),
+          'url': chosenUrl,
+          'lowUrl': cachedLow.isNotEmpty ? cachedLow : chosenUrl,
+          'highUrl': cachedHigh.isNotEmpty ? cachedHigh : chosenUrl,
+          'year': data?['year']?.toString() ?? '',
+          '320kbps': 'false',
+          'has_lyrics': 'false',
+          'release_date': data?['release_date']?.toString() ?? '',
+          'album_id': data?['album_id']?.toString() ?? '',
+          'subtitle': data?['subtitle']?.toString() ?? '',
+          'perma_url': 'https://youtube.com/watch?v=$id',
+        };
+      }
+    }
+
+    final Map<String, dynamic>? playerResponse =
+        await _requestInnerTubePlayer(id);
+    if (playerResponse == null) return null;
+
+    final Map<String, dynamic>? videoDetails =
+        playerResponse['videoDetails'] as Map<String, dynamic>?;
+
+    final Map<String, dynamic>? streamingData =
+        playerResponse['streamingData'] as Map<String, dynamic>?;
+
+    final List formats = streamingData?['formats'] as List? ?? [];
+    final List adaptiveFormats =
+        streamingData?['adaptiveFormats'] as List? ?? [];
+
+    final List<String> urls = [];
+
+    for (final f in adaptiveFormats) {
+      if (f is Map &&
+          f['mimeType']?.toString().contains('audio') == true &&
+          f['url'] != null &&
+          f['url'].toString().isNotEmpty) {
+        urls.add(f['url'].toString());
+      }
+    }
+
+    for (final f in formats) {
+      if (f is Map && f['url'] != null && f['url'].toString().isNotEmpty) {
+        urls.add(f['url'].toString());
+      }
+    }
+
+    if (urls.isEmpty) {
+      Logger.root.warning('No stream URLs found in InnerTube response for $id');
+      return null;
+    }
+
+    final String finalUrl = quality == 'High' ? urls.last : urls.first;
+    final match = RegExp('expire=([0-9]+)').firstMatch(finalUrl);
+    final int parsedExpire = match != null
+        ? (int.tryParse(match.group(1)!) ?? (now + 18000))
+        : (now + 18000);
+    final String expireAt = parsedExpire.toString();
+
+    if (Hive.isBoxOpen('ytlinkcache')) {
+      try {
+        await Hive.box('ytlinkcache').put(
+          id,
+          {
+            'url': finalUrl,
+            'expire_at': expireAt,
+            'quality': quality,
+            'lowUrl': urls.first,
+            'highUrl': urls.last,
+            'cached_at': now,
+          },
+        );
+      } catch (e) {
+        Logger.root
+            .severe('Hive Error in formatVideoFromInnerTube cache save: $e');
+      }
+    }
+
+    final List thumbs =
+        (videoDetails?['thumbnail']?['thumbnails'] as List?) ?? [];
+    final String thumbUrl =
+        thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+
+    final String title = (data?['title']?.toString() ?? '').isNotEmpty
+        ? data!['title'].toString()
+        : (videoDetails?['title']?.toString() ?? id);
+
+    final String artist = (data?['artist']?.toString() ?? '').isNotEmpty
+        ? data!['artist'].toString()
+        : (videoDetails?['author']?.toString() ?? '');
+
+    final String duration = (data?['duration']?.toString() ?? '').isNotEmpty
+        ? data!['duration'].toString()
+        : (videoDetails?['lengthSeconds']?.toString() ?? '180');
+
+    final String image = (data?['image']?.toString() ?? '').isNotEmpty
+        ? data!['image'].toString()
+        : thumbUrl;
+
+    return {
+      'id': id,
+      'album': (data?['album']?.toString() ?? '').isNotEmpty
+          ? data!['album'].toString()
+          : artist,
+      'duration': duration,
+      'title': title.trim(),
+      'artist': artist.replaceAll('- Topic', '').trim(),
+      'image': image,
+      'secondImage': thumbUrl,
+      'language': 'YouTube',
+      'genre': 'YouTube',
+      'expire_at': expireAt,
+      'url': finalUrl,
+      'lowUrl': urls.first,
+      'highUrl': urls.last,
+      'year': data?['year']?.toString() ?? '',
+      '320kbps': 'false',
+      'has_lyrics': 'false',
+      'release_date': data?['release_date']?.toString() ?? '',
+      'album_id': videoDetails?['channelId']?.toString() ?? '',
+      'subtitle': (data?['subtitle']?.toString() ?? '').isNotEmpty
+          ? data!['subtitle'].toString()
+          : artist,
+      'perma_url': 'https://youtube.com/watch?v=$id',
+    };
+  }
+
   Future<List<String>> _fetchUriInternal(Video video) async {
     final Stopwatch stopwatch = Stopwatch()..start();
+
+    // 1. Try InnerTube mobile player endpoint first
+    try {
+      final List<String> innerTubeUrls =
+          await fetchStreamsFromInnerTube(video.id.value);
+      if (innerTubeUrls.isNotEmpty) {
+        stopwatch.stop();
+        Logger.root.info(
+          'InnerTube stream resolved for ${video.id.value} in ${stopwatch.elapsedMilliseconds}ms (${innerTubeUrls.length} urls)',
+        );
+        return innerTubeUrls;
+      }
+    } catch (e) {
+      Logger.root.warning(
+        'InnerTube stream resolution failed for ${video.id.value}: $e, falling back to manifest',
+      );
+    }
+
+    // 2. Fall back to youtube_explode manifest
     try {
       final StreamManifest manifest = await yt.videos.streamsClient
           .getManifest(video.id)
@@ -684,8 +974,7 @@ class YouTubeServices {
 
       final List<AudioOnlyStreamInfo> audioOnlyList =
           manifest.audioOnly.sortByBitrate();
-      final List<MuxedStreamInfo> muxedList =
-          manifest.muxed.sortByBitrate();
+      final List<MuxedStreamInfo> muxedList = manifest.muxed.sortByBitrate();
 
       final int audioCount = audioOnlyList.length;
       final int muxedCount = muxedList.length;

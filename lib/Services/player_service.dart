@@ -46,7 +46,8 @@ class PlayerInvoke {
   }) async {
     final int globalIndex = index < 0 ? 0 : index;
     bool? offline = isOffline;
-    final List finalList = songsList.toList();
+    final List finalList = songsList.where((item) => item != null).toList();
+    if (finalList.isEmpty) return;
     if (shuffle) finalList.shuffle();
     if (offline == null) {
       if (audioHandler.mediaItem.value?.extras!['url'].startsWith('http')
@@ -217,8 +218,8 @@ class PlayerInvoke {
             (cachedQuality.isNotEmpty &&
                 cachedQuality != currentQuality &&
                 cachedHigh.isEmpty)) {
-          Logger.root
-              .info('youtube link expired/stale in cache for ${playItem["title"]}');
+          Logger.root.info(
+              'youtube link expired/stale in cache for ${playItem["title"]}');
           final newData =
               await YouTubeServices().refreshLink(playItem['id'].toString());
           Logger.root.info(
@@ -256,14 +257,18 @@ class PlayerInvoke {
     bool recommend = true,
     // String? playlistBox,
   }) async {
+    if (response.isEmpty) return;
+    final int safeIndex = (index < 0 || index >= response.length) ? 0 : index;
     final List<MediaItem> queue = [];
-    final Map playItem = response[index] as Map;
-    final Map? nextItem =
-        index == response.length - 1 ? null : response[index + 1] as Map;
-    if (playItem['genre'] == 'YouTube') {
+    final Map playItem = response[safeIndex] as Map;
+    final Map? nextItem = safeIndex == response.length - 1
+        ? null
+        : response[safeIndex + 1] as Map;
+    if (playItem['genre'] == 'YouTube' || playItem['language'] == 'YouTube') {
       await refreshYtLink(playItem);
     }
-    if (nextItem != null && nextItem['genre'] == 'YouTube') {
+    if (nextItem != null &&
+        (nextItem['genre'] == 'YouTube' || nextItem['language'] == 'YouTube')) {
       await refreshYtLink(nextItem);
     }
 
@@ -276,13 +281,16 @@ class PlayerInvoke {
         ),
       ),
     );
-    await updateNplay(queue, index);
+    await updateNplay(queue, safeIndex);
   }
 
   static Future<void> updateNplay(List<MediaItem> queue, int index) async {
+    if (queue.isEmpty) return;
+    final int safeIndex = (index < 0 || index >= queue.length) ? 0 : index;
     await audioHandler.setShuffleMode(AudioServiceShuffleMode.none);
     await audioHandler.updateQueue(queue);
-    await audioHandler.customAction('skipToMediaItem', {'id': queue[index].id});
+    await audioHandler
+        .customAction('skipToMediaItem', {'id': queue[safeIndex].id});
     await audioHandler.play();
     final String repeatMode =
         Hive.box('settings').get('repeatMode', defaultValue: 'None').toString();

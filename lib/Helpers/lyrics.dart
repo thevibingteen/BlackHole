@@ -48,6 +48,34 @@ class Lyrics {
     return false;
   }
 
+  static String cleanSongTitle(String title) {
+    if (title.isEmpty) return '';
+    String cleaned = title;
+    cleaned = cleaned.replaceAll(
+      RegExp(
+        r'\s*[\(\[](?:from|official|feat\.?|ft\.?|video|audio|lyric|remix|hd|4k|version)[^\)\]]*[\)\]]',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    cleaned = cleaned.split(
+      RegExp(
+        r'\s*[-|/]\s*(?:official|video|audio|lyrics|hd|4k)',
+        caseSensitive: false,
+      ),
+    )[0];
+    cleaned = cleaned.split('|')[0];
+    return cleaned.trim();
+  }
+
+  static String cleanArtistName(String artist) {
+    if (artist.isEmpty) return '';
+    final parts = artist.split(
+      RegExp(r'[,&/]|\bfeat\.?\b|\bft\.?\b', caseSensitive: false),
+    );
+    return parts.first.trim();
+  }
+
   static Future<Map<String, String>> getLyrics({
     required String id,
     required String title,
@@ -115,8 +143,12 @@ class Lyrics {
 
     // 4. Try MusixMatch text lyrics
     try {
-      Logger.root.info('Lyrics not available on Saavn/Spotify, finding on Musixmatch');
-      final mmLyrics = await getMusixMatchLyrics(title: title, artist: artist);
+      Logger.root
+          .info('Lyrics not available on Saavn/Spotify, finding on Musixmatch');
+      final mmLyrics = await getMusixMatchLyrics(
+        title: cleanSongTitle(title),
+        artist: cleanArtistName(artist),
+      );
       if (mmLyrics.isNotEmpty && !isHtmlOrChallenge(mmLyrics)) {
         result['lyrics'] = mmLyrics;
         result['type'] = 'text';
@@ -147,20 +179,14 @@ class Lyrics {
       'source': 'LRCLIB',
     };
 
-    // Clean track name for search (remove extraneous tags like '(Official Video)', etc.)
-    final cleanTrackName = trackName
-        .split('(From')[0]
-        .split('(Official')[0]
-        .split('[Official')[0]
-        .split('|')[0]
-        .trim();
-    final cleanArtistName = artistName.split(',')[0].trim();
+    final cleanTrackName = cleanSongTitle(trackName);
+    final cleanArtist = cleanArtistName(artistName);
 
     // 1. Exact track lookup
     try {
       final queryParams = <String, String>{
         'track_name': cleanTrackName,
-        'artist_name': cleanArtistName,
+        'artist_name': cleanArtist,
       };
       if (albumName != null && albumName.isNotEmpty) {
         queryParams['album_name'] = albumName;
@@ -201,7 +227,7 @@ class Lyrics {
     // 2. Search fallback
     try {
       final searchUri = Uri.https('lrclib.net', '/api/search', {
-        'q': '$cleanTrackName $cleanArtistName',
+        'q': '$cleanTrackName $cleanArtist',
       });
       final searchRes = await get(
         searchUri,
