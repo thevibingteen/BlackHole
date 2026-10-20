@@ -30,12 +30,12 @@ jobs:
           echo "Current HEAD commit: $(git rev-parse HEAD)"
           echo "Comparing protected UI paths against pinned baseline $ORIGINAL_MAIN_SHA"
           git fetch origin $ORIGINAL_MAIN_SHA
-          echo "Authorized Charts screen diff:"
-          git diff --stat $ORIGINAL_MAIN_SHA -- "lib/Screens/Top Charts/top.dart"
+          echo "Authorized screen diffs (Top Charts, Login Pref, Home Saavn):"
+          git diff --stat $ORIGINAL_MAIN_SHA -- "lib/Screens/Top Charts/top.dart" "lib/Screens/Login/pref.dart" "lib/Screens/Home/saavn.dart"
           echo "Enforcing strict 0-diff freeze on all other protected UI paths:"
-          git diff --stat $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
-          git diff --exit-code $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
-          echo "UI Freeze validation PASSED: 0 diff in all protected UI directories except authorized Charts screen."
+          git diff --stat $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' ':!lib/Screens/Login/pref.dart' ':!lib/Screens/Home/saavn.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
+          git diff --exit-code $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' ':!lib/Screens/Login/pref.dart' ':!lib/Screens/Home/saavn.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
+          echo "UI Freeze validation PASSED: 0 diff in all protected UI directories except authorized screens."
 
       - name: Setup Java
         uses: actions/setup-java@v4

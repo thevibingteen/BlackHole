@@ -45,9 +45,26 @@ List preferredLanguage = Hive.box('settings')
 List likedRadio =
     Hive.box('settings').get('likedRadio', defaultValue: []) as List;
 Map data = Hive.box('cache').get('homepage', defaultValue: {}) as Map;
-List lists = ['recent', 'playlist', ...?data['collections'] as List?];
+List lists = buildHomeLists(data, Hive.box('settings').get('likedArtists', defaultValue: {}) as Map);
+
+List buildHomeLists(Map homeData, Map likedArtistsMap) {
+  return FormatResponse.buildHomeLists(
+    homeData,
+    likedArtistsMap,
+    likedRadioList: likedRadio,
+  );
+}
 
 class SaavnHomePage extends StatefulWidget {
+  static void resetHomeFeed() {
+    fetched = false;
+    data = {};
+    lists = ['recent', 'playlist'];
+    if (Hive.isBoxOpen('cache')) {
+      Hive.box('cache').delete('homepage');
+    }
+  }
+
   @override
   _SaavnHomePageState createState() => _SaavnHomePageState();
 }
@@ -68,21 +85,36 @@ class _SaavnHomePageState extends State<SaavnHomePage>
   int recentIndex = 0;
   int playlistIndex = 1;
 
+  void checkCacheValidity() {
+    final currentPreferred = (Hive.box('settings')
+            .get('preferredLanguage', defaultValue: ['Hindi']) as List)
+        .map((e) => e.toString().toLowerCase())
+        .toList();
+    final cachedPreferred = (data['preferredLanguage'] as List?)
+        ?.map((e) => e.toString().toLowerCase())
+        .toList();
+
+    if (cachedPreferred != null &&
+        currentPreferred.toString() != cachedPreferred.toString()) {
+      data = {};
+      fetched = false;
+      lists = ['recent', 'playlist'];
+    }
+  }
+
   Future<void> getHomePageData() async {
     Map recievedData = await SaavnAPI().fetchHomePageData();
     if (recievedData.isNotEmpty) {
       Hive.box('cache').put('homepage', recievedData);
       data = recievedData;
-      lists = ['recent', 'playlist', ...?data['collections'] as List?];
-      lists.insert((lists.length / 2).round(), 'likedArtists');
+      lists = buildHomeLists(data, likedArtists);
     }
     setState(() {});
     recievedData = await FormatResponse.formatPromoLists(data);
     if (recievedData.isNotEmpty) {
       Hive.box('cache').put('homepage', recievedData);
       data = recievedData;
-      lists = ['recent', 'playlist', ...?data['collections'] as List?];
-      lists.insert((lists.length / 2).round(), 'likedArtists');
+      lists = buildHomeLists(data, likedArtists);
     }
     setState(() {});
   }
@@ -130,6 +162,7 @@ class _SaavnHomePageState extends State<SaavnHomePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    checkCacheValidity();
     if (!fetched) {
       getHomePageData();
       fetched = true;
@@ -435,12 +468,21 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                         ],
                       );
               }
-              return (data[lists[idx]] == null ||
-                      blacklistedHomeSections.contains(
-                        data['modules'][lists[idx]]?['title']
-                            ?.toString()
-                            .toLowerCase(),
-                      ))
+              final listKey = lists[idx].toString();
+              final isRadio = data['modules']?[listKey]?['title']?.toString() ==
+                  'Radio Stations';
+              final moduleData = data[listKey];
+              final isEffectivelyEmpty = moduleData == null ||
+                  (moduleData is List &&
+                      moduleData.isEmpty &&
+                      (!isRadio || likedRadio.isEmpty));
+              final isBlacklisted = blacklistedHomeSections.contains(
+                data['modules']?[listKey]?['title']
+                    ?.toString()
+                    .toLowerCase(),
+              );
+
+              return (isEffectivelyEmpty || isBlacklisted)
                   ? const SizedBox()
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -562,27 +604,25 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                             physics: const BouncingScrollPhysics(),
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.symmetric(horizontal: 10),
-                            itemCount: data['modules'][lists[idx]]?['title']
-                                        ?.toString() ==
-                                    'Radio Stations'
-                                ? (data[lists[idx]] as List).length +
-                                    likedRadio.length
-                                : (data[lists[idx]] as List).length,
+                            itemCount: isRadio
+                                ? ((moduleData is List ? moduleData.length : 0) +
+                                    likedRadio.length)
+                                : (moduleData is List ? moduleData.length : 0),
                             itemBuilder: (context, index) {
                               Map item;
-                              if (data['modules'][lists[idx]]?['title']
-                                      ?.toString() ==
-                                  'Radio Stations') {
+                              if (isRadio) {
                                 index < likedRadio.length
                                     ? item = likedRadio[index] as Map
-                                    : item = data[lists[idx]]
+                                    : item = (moduleData as List)
                                         [index - likedRadio.length] as Map;
                               } else {
-                                item = data[lists[idx]][index] as Map;
+                                item = (moduleData as List)[index] as Map;
                               }
-                              final currentSongList = data[lists[idx]]
-                                  .where((e) => e['type'] == 'song')
-                                  .toList();
+                              final currentSongList = (moduleData is List)
+                                  ? moduleData
+                                      .where((e) => e['type'] == 'song')
+                                      .toList()
+                                  : [];
                               final subTitle = getSubTitle(item);
                               item['subTitle'] = subTitle;
                               if (item.isEmpty) return const SizedBox();

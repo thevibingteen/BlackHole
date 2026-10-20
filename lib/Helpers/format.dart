@@ -79,6 +79,75 @@ class FormatResponse {
     return searchedList;
   }
 
+  static const List<String> masterLanguages = [
+    'Hindi',
+    'English',
+    'Punjabi',
+    'Tamil',
+    'Telugu',
+    'Marathi',
+    'Gujarati',
+    'Bengali',
+    'Kannada',
+    'Bhojpuri',
+    'Malayalam',
+    'Urdu',
+    'Haryanvi',
+    'Rajasthani',
+    'Odia',
+    'Assamese',
+  ];
+
+  static String parseDuration(dynamic raw) {
+    if (raw == null) return '0';
+    if (raw is int) {
+      return raw > 0 ? raw.toString() : '0';
+    }
+    if (raw is double) {
+      return raw > 0 ? raw.round().toString() : '0';
+    }
+    final str = raw.toString().trim();
+    if (str.isEmpty || str == 'null' || str == '0') return '0';
+    if (str.contains(':')) {
+      final parts = str.split(':');
+      if (parts.length == 2) {
+        final m = int.tryParse(parts[0]) ?? 0;
+        final s = int.tryParse(parts[1]) ?? 0;
+        final total = m * 60 + s;
+        return total > 0 ? total.toString() : '0';
+      } else if (parts.length == 3) {
+        final h = int.tryParse(parts[0]) ?? 0;
+        final m = int.tryParse(parts[1]) ?? 0;
+        final s = int.tryParse(parts[2]) ?? 0;
+        final total = h * 3600 + m * 60 + s;
+        return total > 0 ? total.toString() : '0';
+      }
+    }
+    final parsed = int.tryParse(str) ?? double.tryParse(str)?.round() ?? 0;
+    return parsed > 0 ? parsed.toString() : '0';
+  }
+
+  static bool isLanguageUnselected(String langName, Set<String> activeLangs) {
+    final lower = langName.trim().toLowerCase();
+    final isCatalogue = masterLanguages.any((l) => l.toLowerCase() == lower);
+    if (!isCatalogue) return false;
+    return !activeLangs.contains(lower);
+  }
+
+  static bool moduleMatchesUnselectedLanguage(String title, Set<String> activeLangs) {
+    final lowerTitle = title.toLowerCase();
+    for (final l in masterLanguages) {
+      final lLower = l.toLowerCase();
+      final regex = RegExp('\\b${RegExp.escape(lLower)}\\b', caseSensitive: false);
+      if (regex.hasMatch(lowerTitle)) {
+        if (!activeLangs.contains(lLower)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   static Future<Map> formatSingleSongResponse(Map response) async {
     try {
       final List artistNames = [];
@@ -117,6 +186,29 @@ class FormatResponse {
       } else if (response['subtitle'] != null &&
           response['subtitle'].toString().trim().isNotEmpty) {
         artistNames.add(response['subtitle'].toString());
+      } else if (moreInfo['show_title'] != null &&
+          moreInfo['show_title'].toString().trim().isNotEmpty) {
+        artistNames.add(moreInfo['show_title'].toString());
+      } else if (response['show_title'] != null &&
+          response['show_title'].toString().trim().isNotEmpty) {
+        artistNames.add(response['show_title'].toString());
+      } else if (moreInfo['partner_name'] != null &&
+          moreInfo['partner_name'].toString().trim().isNotEmpty &&
+          moreInfo['partner_name'].toString().trim().toLowerCase() != 'podcaster') {
+        artistNames.add(moreInfo['partner_name'].toString());
+      } else if (response['header_desc'] != null &&
+          response['header_desc'].toString().trim().isNotEmpty &&
+          response['header_desc'].toString().startsWith('Episode from ')) {
+        final epShow = response['header_desc']
+            .toString()
+            .replaceFirst('Episode from ', '')
+            .replaceAll(RegExp(r'\.+$'), '')
+            .trim();
+        if (epShow.isNotEmpty) {
+          artistNames.add(epShow);
+        } else {
+          artistNames.add('Unknown');
+        }
       } else {
         artistNames.add('Unknown');
       }
@@ -135,12 +227,23 @@ class FormatResponse {
             .toString();
       }
 
+      String parsedDuration = parseDuration(moreInfo['duration']);
+      if (parsedDuration == '0') {
+        parsedDuration = parseDuration(response['duration']);
+      }
+
+      final String albumVal = (moreInfo['album']?.toString() ?? '').isNotEmpty
+          ? moreInfo['album'].toString().unescape()
+          : ((moreInfo['show_title']?.toString() ?? '').isNotEmpty
+              ? moreInfo['show_title'].toString().unescape()
+              : (response['show_title']?.toString().unescape() ?? ''));
+
       return {
         'id': response['id']?.toString() ?? '',
         'type': response['type']?.toString() ?? 'song',
-        'album': moreInfo['album']?.toString().unescape() ?? '',
+        'album': albumVal,
         'year': (response['year'] ?? moreInfo['year'] ?? '').toString(),
-        'duration': (moreInfo['duration'] ?? '0').toString(),
+        'duration': parsedDuration,
         'language': (response['language'] ??
                 moreInfo['editorial_language'] ??
                 '')
@@ -207,6 +310,11 @@ class FormatResponse {
         });
       }
 
+      String parsedDuration = parseDuration(response['duration']);
+      if (parsedDuration == '0') {
+        parsedDuration = parseDuration(response['more_info']?['duration']);
+      }
+
       return {
         'id': response['id'],
         'type': response['type'],
@@ -214,7 +322,7 @@ class FormatResponse {
         // .split('(')
         // .first
         'year': response['year'],
-        'duration': response['duration'],
+        'duration': parsedDuration,
         'language': response['language'].toString().capitalize(),
         'genre': response['language'].toString().capitalize(),
         '320kbps': response['320kbps'],
@@ -514,18 +622,50 @@ class FormatResponse {
     }
   }
 
-  static Future<Map> formatHomePageData(Map inputData) async {
+  static Future<Map> formatHomePageData(
+    Map inputData, {
+    List? preferredLangs,
+  }) async {
     final Map data = Map<dynamic, dynamic>.from(inputData);
     try {
+      final activeLangs = (preferredLangs ??
+              (Hive.isBoxOpen('settings')
+                  ? Hive.box('settings')
+                      .get('preferredLanguage', defaultValue: ['Hindi']) as List
+                  : ['Hindi']))
+          .map((e) => e.toString().trim().toLowerCase())
+          .toSet();
+
+      List filterItemsInList(List list) {
+        return list.where((item) {
+          if (item is! Map) return false;
+          final itemLang = (item['language'] ??
+                  item['more_info']?['language'] ??
+                  item['more_info']?['editorial_language'])
+              ?.toString()
+              .trim()
+              .toLowerCase();
+          if (itemLang != null && itemLang.isNotEmpty) {
+            if (isLanguageUnselected(itemLang, activeLangs)) {
+              return false;
+            }
+          }
+          return true;
+        }).toList();
+      }
+
       if (data['new_trending'] != null && data['new_trending'] is List) {
+        data['new_trending'] = filterItemsInList(data['new_trending'] as List);
         data['new_trending'] =
             await formatSongsInList(data['new_trending'] as List);
       }
       if (data['new_albums'] != null && data['new_albums'] is List) {
+        data['new_albums'] = filterItemsInList(data['new_albums'] as List);
         data['new_albums'] =
             await formatSongsInList(data['new_albums'] as List);
       }
       if (data['city_mod'] != null && data['city_mod'] is List) {
+        data['city_mod'] = filterItemsInList(data['city_mod'] as List);
         data['city_mod'] = await formatSongsInList(data['city_mod'] as List);
       }
       final List promoList = [];
@@ -533,19 +673,26 @@ class FormatResponse {
       if (data['modules'] != null && data['modules'] is Map) {
         (data['modules'] as Map).forEach((k, v) {
           if (k.toString().startsWith('promo')) {
+            final modTitle = (v is Map ? v['title']?.toString() : '') ?? '';
+            if (moduleMatchesUnselectedLanguage(modTitle, activeLangs)) {
+              return;
+            }
             final modData = data[k];
-            if (modData is List && modData.isNotEmpty) {
-              final firstItem = modData[0];
-              if (firstItem is Map &&
-                  firstItem['type'] == 'song' &&
-                  (firstItem['mini_obj'] as bool? ?? false)) {
-                if (firstItem['more_info']?['encrypted_media_url'] != null) {
-                  promoList.add(k.toString());
+            if (modData is List) {
+              data[k] = filterItemsInList(modData);
+              if ((data[k] as List).isNotEmpty) {
+                final firstItem = data[k][0];
+                if (firstItem is Map &&
+                    firstItem['type'] == 'song' &&
+                    (firstItem['mini_obj'] as bool? ?? false)) {
+                  if (firstItem['more_info']?['encrypted_media_url'] != null) {
+                    promoList.add(k.toString());
+                  } else {
+                    promoListTemp.add(k.toString());
+                  }
                 } else {
-                  promoListTemp.add(k.toString());
+                  promoList.add(k.toString());
                 }
-              } else {
-                promoList.add(k.toString());
               }
             }
           }
@@ -557,7 +704,8 @@ class FormatResponse {
               await formatSongsInList(data[promoList[i]] as List);
         }
       }
-      data['collections'] = [
+
+      final candidateCollections = [
         'new_trending',
         'charts',
         'new_albums',
@@ -568,7 +716,19 @@ class FormatResponse {
         'artist_recos',
         ...promoList
       ];
+
+      final filteredCollections = <String>[];
+      for (final col in candidateCollections) {
+        final modTitle = data['modules']?[col]?['title']?.toString() ?? '';
+        if (moduleMatchesUnselectedLanguage(modTitle, activeLangs)) {
+          continue;
+        }
+        filteredCollections.add(col);
+      }
+
+      data['collections'] = filteredCollections;
       data['collections_temp'] = promoListTemp;
+      data['preferredLanguage'] = activeLangs.toList();
     } catch (e) {
       Logger.root.severe('Error inside formatHomePageData: $e');
       data['collections'] ??= [
@@ -590,13 +750,16 @@ class FormatResponse {
     try {
       final List promoList = (data['collections_temp'] as List?) ?? [];
       for (int i = 0; i < promoList.length; i++) {
-        if (data[promoList[i]] is List) {
-          data[promoList[i]] =
-              await formatSongsInList(data[promoList[i]] as List);
+        final colKey = promoList[i].toString();
+        if (data[colKey] is List) {
+          data[colKey] =
+              await formatSongsInList(data[colKey] as List);
+          if ((data[colKey] as List).isNotEmpty && data['collections'] is List) {
+            if (!(data['collections'] as List).contains(colKey)) {
+              (data['collections'] as List).add(colKey);
+            }
+          }
         }
-      }
-      if (data['collections'] is List) {
-        (data['collections'] as List).addAll(promoList);
       }
       data['collections_temp'] = [];
     } catch (e) {
@@ -644,5 +807,53 @@ class FormatResponse {
       (value) => value == null || (value is Map && value.isEmpty),
     );
     return list;
+  }
+
+  static List buildHomeLists(
+    Map homeData,
+    Map likedArtistsMap, {
+    List likedRadioList = const [],
+    Set<String>? preferredLangs,
+  }) {
+    final activeLangs = preferredLangs ??
+        (Hive.isBoxOpen('settings')
+                ? Hive.box('settings')
+                    .get('preferredLanguage', defaultValue: ['Hindi']) as List
+                : ['Hindi'])
+            .map((e) => e.toString().toLowerCase())
+            .toSet();
+
+    final rawCollections = (homeData['collections'] as List?) ?? [];
+    final validCollections = <String>[];
+
+    for (final col in rawCollections) {
+      final colKey = col.toString();
+      final items = homeData[colKey];
+      final modTitle =
+          homeData['modules']?[colKey]?['title']?.toString() ?? '';
+      final isRadio = modTitle == 'Radio Stations';
+
+      if (moduleMatchesUnselectedLanguage(modTitle, activeLangs)) {
+        continue;
+      }
+
+      if (isRadio) {
+        if (likedRadioList.isNotEmpty ||
+            (items is List && items.isNotEmpty)) {
+          validCollections.add(colKey);
+        }
+        continue;
+      }
+
+      if (items is List && items.isNotEmpty) {
+        validCollections.add(colKey);
+      }
+    }
+
+    final List combined = ['recent', 'playlist', ...validCollections];
+    if (likedArtistsMap.isNotEmpty) {
+      combined.insert((combined.length / 2).round(), 'likedArtists');
+    }
+    return combined;
   }
 }

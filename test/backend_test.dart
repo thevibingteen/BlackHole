@@ -1,3 +1,5 @@
+import 'package:blackhole/APIs/api.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'dart:convert';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/Helpers/format.dart';
@@ -1437,6 +1439,202 @@ void main() {
       expect(isSelectorVisible(0), isTrue);
       expect(isSelectorVisible(1), isFalse);
       expect(isSelectorVisible(2), isFalse);
+    });
+  });
+  group('Feature A: Language Availability & Feed Personalization Tests', () {
+    test('determineAvailabilityFromLaunchData classifies available languages correctly', () {
+      final mockData = {
+        'modules': {
+          'promo:vx:data:127': {'title': 'Top Albums - Assamese'},
+        },
+        'promo:vx:data:127': [
+          {'id': '1', 'title': 'Assamese Song', 'language': 'Assamese'}
+        ]
+      };
+      final avail = SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Assamese');
+      expect(avail, equals(LanguageAvailability.available));
+    });
+
+    test('determineAvailabilityFromLaunchData classifies unavailable languages when items fallback', () {
+      final mockData = {
+        'modules': {
+          'promo:vx:data:100': {'title': 'Top Bollywood Hits'},
+        },
+        'promo:vx:data:100': [
+          {'id': '1', 'title': 'Hindi Song', 'language': 'hindi'}
+        ]
+      };
+      final avail = SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Urdu');
+      expect(avail, equals(LanguageAvailability.unavailable));
+    });
+
+    test('determineAvailabilityFromLaunchData classifies unknown on empty or malformed data', () {
+      expect(SaavnAPI.determineAvailabilityFromLaunchData({}, 'Hindi'),
+          equals(LanguageAvailability.unknown));
+      expect(SaavnAPI.determineAvailabilityFromLaunchData({'modules': {}}, 'Hindi'),
+          equals(LanguageAvailability.unknown));
+    });
+
+    test('isLanguageUnselected correctly identifies active vs unselected languages', () {
+      final active = {'hindi', 'english'};
+      expect(FormatResponse.isLanguageUnselected('hindi', active), isFalse);
+      expect(FormatResponse.isLanguageUnselected('English', active), isFalse);
+      expect(FormatResponse.isLanguageUnselected('Assamese', active), isTrue);
+      expect(FormatResponse.isLanguageUnselected('odia', active), isTrue);
+      expect(FormatResponse.isLanguageUnselected('unknown_custom_lang', active), isFalse);
+    });
+
+    test('moduleMatchesUnselectedLanguage detects regional modules correctly', () {
+      final active = {'hindi', 'english'};
+      expect(FormatResponse.moduleMatchesUnselectedLanguage('Top Albums - Assamese', active), isTrue);
+      expect(FormatResponse.moduleMatchesUnselectedLanguage('New Odia Releases', active), isTrue);
+      expect(FormatResponse.moduleMatchesUnselectedLanguage('Trending Hindi Songs', active), isFalse);
+      expect(FormatResponse.moduleMatchesUnselectedLanguage('Weekly English Top 20', active), isFalse);
+      expect(FormatResponse.moduleMatchesUnselectedLanguage('Radio Stations', active), isFalse);
+    });
+  });
+
+  group('Bug 1: Empty Home Modules Suppression Tests', () {
+    test('buildHomeLists drops empty non-radio modules while keeping populated ones', () {
+      final homeData = {
+        'collections': ['top_albums_odia', 'top_hindi_hits', 'radio_stations'],
+        'modules': {
+          'top_albums_odia': {'title': 'Top Albums - Odia'},
+          'top_hindi_hits': {'title': 'Trending Hindi Hits'},
+          'radio_stations': {'title': 'Radio Stations'},
+        },
+        'top_albums_odia': [],
+        'top_hindi_hits': [{'id': 'h1', 'title': 'Song 1'}],
+        'radio_stations': [],
+      };
+      final lists = FormatResponse.buildHomeLists(homeData, {}, preferredLangs: {'hindi'});
+      expect(lists.contains('top_albums_odia'), isFalse);
+      expect(lists.contains('top_hindi_hits'), isTrue);
+    });
+
+    test('buildHomeLists drops modules matching unselected languages', () {
+      final homeData = {
+        'collections': ['assamese_promo', 'hindi_promo'],
+        'modules': {
+          'assamese_promo': {'title': 'Top Albums - Assamese'},
+          'hindi_promo': {'title': 'Top Albums - Hindi'},
+        },
+        'assamese_promo': [{'id': 'a1', 'title': 'A Song'}],
+        'hindi_promo': [{'id': 'h1', 'title': 'H Song'}],
+      };
+      final lists = FormatResponse.buildHomeLists(homeData, {}, preferredLangs: {'hindi'});
+      expect(lists.contains('assamese_promo'), isFalse);
+      expect(lists.contains('hindi_promo'), isTrue);
+    });
+  });
+
+  group('Bug 2: Zero-Duration Metadata Fix & Duration Parsing Tests', () {
+    test('parseDuration handles various valid formats correctly', () {
+      expect(FormatResponse.parseDuration(180), equals('180'));
+      expect(FormatResponse.parseDuration(215.5), equals('216'));
+      expect(FormatResponse.parseDuration('240'), equals('240'));
+      expect(FormatResponse.parseDuration('03:45'), equals('225'));
+      expect(FormatResponse.parseDuration('01:02:03'), equals('3723'));
+    });
+
+    test('parseDuration rejects zero, negative, and invalid formats safely', () {
+      expect(FormatResponse.parseDuration(0), equals('0'));
+      expect(FormatResponse.parseDuration(-10), equals('0'));
+      expect(FormatResponse.parseDuration('0'), equals('0'));
+      expect(FormatResponse.parseDuration('00:00'), equals('0'));
+      expect(FormatResponse.parseDuration(''), equals('0'));
+      expect(FormatResponse.parseDuration('unknown'), equals('0'));
+      expect(FormatResponse.parseDuration(null), equals('0'));
+    });
+
+    test('formatSingleSongResponse falls back to top-level duration when more_info duration is missing or zero', () async {
+      final songWithoutMoreInfoDuration = {
+        'id': 's1',
+        'title': 'Promise',
+        'duration': '210',
+        'more_info': {
+          'duration': '0',
+          'singers': 'Artist Name',
+        }
+      };
+      final formatted = await FormatResponse.formatSingleSongResponse(songWithoutMoreInfoDuration);
+      expect(formatted['duration'], equals('210'));
+    });
+  });
+
+  group('Bug 3: Podcast Episode Metadata Hardening Tests', () {
+    test('formatSingleSongResponse falls back to show_title when artist is missing', () async {
+      final podcastEpisode = {
+        'id': 'ep1',
+        'type': 'episode',
+        'title': 'Muje Kon Puchta Tha Tere Bandgi Se Pahle Bhajan',
+        'more_info': {
+          'show_title': 'Shri Krishna Amritvani',
+          'duration': '420',
+          '320kbps': 'false',
+          'artistMap': {'artists': []},
+        }
+      };
+      final formatted = await FormatResponse.formatSingleSongResponse(podcastEpisode);
+      expect(formatted['artist'], equals('Shri Krishna Amritvani'));
+      expect(formatted['album'], equals('Shri Krishna Amritvani'));
+    });
+
+    test('formatSingleSongResponse correctly marks 320kbps boolean flag', () async {
+      final podcast = {
+        'id': 'ep1',
+        'more_info': {
+          '320kbps': 'false',
+        }
+      };
+      final formatted = await FormatResponse.formatSingleSongResponse(podcast);
+      expect(formatted['320kbps'], isFalse);
+
+      final highQualitySong = {
+        'id': 's2',
+        'more_info': {
+          '320kbps': 'true',
+        }
+      };
+      final formattedSong = await FormatResponse.formatSingleSongResponse(highQualitySong);
+      expect(formattedSong['320kbps'], isTrue);
+    });
+  });
+
+  group('Bug 4: YouTube & Media Thumbnail Hardening Tests', () {
+    test('getImageUrl normalizes protocol-relative and http URLs', () {
+      expect(getImageUrl('//c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
+      expect(getImageUrl('http://c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
+      expect(getImageUrl('https://c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
+    });
+
+    test('extractThumbnailUrl handles single and multi-item lists without RangeError', () {
+      final thumbsSingle = [
+        {'url': 'https://i.ytimg.com/vi/abc/hqdefault.jpg'}
+      ];
+      expect(YouTubeServices.extractThumbnailUrl(thumbsSingle, index: 0),
+          equals('https://i.ytimg.com/vi/abc/hqdefault.jpg'));
+      expect(YouTubeServices.extractThumbnailUrl(thumbsSingle, index: 2),
+          equals('https://i.ytimg.com/vi/abc/hqdefault.jpg'));
+      expect(YouTubeServices.extractThumbnailUrl(thumbsSingle, index: -1),
+          equals('https://i.ytimg.com/vi/abc/hqdefault.jpg'));
+    });
+
+    test('extractThumbnailUrl handles protocol-relative and nested lists', () {
+      final nestedThumbs = [
+        [
+          {'url': '//i.ytimg.com/vi/xyz/mqdefault.jpg'}
+        ]
+      ];
+      expect(YouTubeServices.extractThumbnailUrl(nestedThumbs),
+          equals('https://i.ytimg.com/vi/xyz/mqdefault.jpg'));
+    });
+
+    test('extractThumbnailUrl falls back to deterministic 11-char video ID', () {
+      expect(YouTubeServices.extractThumbnailUrl([], videoId: 'dQw4w9WgXcQ'),
+          equals('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'));
+      expect(YouTubeServices.extractThumbnailUrl([], videoId: 'PL1234567890'),
+          equals(''));
     });
   });
 }

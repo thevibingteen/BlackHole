@@ -17,11 +17,13 @@
  * Copyright (c) 2021-2022, Ankit Sangwan
  */
 
+import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/Helpers/backup_restore.dart';
 import 'package:blackhole/Helpers/config.dart';
 import 'package:blackhole/Helpers/countrycodes.dart';
+import 'package:blackhole/Screens/Home/saavn.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:get_it/get_it.dart';
@@ -325,22 +327,42 @@ class _PrefScreenState extends State<PrefScreen> {
                                                                     .colorScheme
                                                                     .secondary,
                                                           ),
-                                                          onPressed: () {
-                                                            setState(() {
-                                                              preferredLanguage =
-                                                                  checked;
-                                                              Navigator.pop(
+                                                          onPressed: () async {
+                                                            Navigator.pop(
+                                                              context,
+                                                            );
+                                                            final selected = List<String>.from(checked);
+                                                            final validation = await SaavnAPI().validateLanguages(selected);
+                                                            final unavailable = <String>[];
+                                                            final finalChecked = <String>[];
+                                                            for (final lang in selected) {
+                                                              if (validation[lang] == LanguageAvailability.unavailable) {
+                                                                unavailable.add(lang);
+                                                              } else {
+                                                                finalChecked.add(lang);
+                                                              }
+                                                            }
+
+                                                            if (unavailable.isNotEmpty && mounted) {
+                                                              ShowSnackBar().showSnackBar(
                                                                 context,
+                                                                'Unavailable on JioSaavn: ' + unavailable.join(', ') + '. Deselected.',
+                                                                duration: const Duration(seconds: 4),
                                                               );
-                                                              Hive.box(
-                                                                'settings',
-                                                              ).put(
-                                                                'preferredLanguage',
-                                                                checked,
-                                                              );
-                                                            });
-                                                            if (preferredLanguage
-                                                                .isEmpty) {
+                                                            }
+
+                                                            if (mounted) {
+                                                              setState(() {
+                                                                preferredLanguage = finalChecked;
+                                                              });
+                                                            }
+                                                            Hive.box('settings').put(
+                                                              'preferredLanguage',
+                                                              finalChecked,
+                                                            );
+                                                            SaavnHomePage.resetHomeFeed();
+
+                                                            if (finalChecked.isEmpty && mounted) {
                                                               ShowSnackBar()
                                                                   .showSnackBar(
                                                                 context,

@@ -24,7 +24,15 @@ import 'package:hive/hive.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 
+enum LanguageAvailability {
+  available,
+  unavailable,
+  unknown,
+}
+
 class SaavnAPI {
+  static const Duration availabilityCacheTtl = Duration(hours: 24);
+
   List preferredLanguages = Hive.box('settings')
       .get('preferredLanguage', defaultValue: ['Hindi']) as List;
   Map<String, String> headers = {};
@@ -52,6 +60,155 @@ class SaavnAPI {
         '__call=search.artistOtherTopSongs', // still not used
   };
 
+  /// Determine availability from a parsed launch data response for a specific language.
+  static LanguageAvailability determineAvailabilityFromLaunchData(
+    Map data,
+    String language,
+  ) {
+    try {
+      final String langLower = language.trim().toLowerCase();
+      final modules = (data['modules'] as Map?) ?? {};
+      if (modules.isEmpty) {
+        return LanguageAvailability.unknown;
+      }
+
+      int langItemsCount = 0;
+
+      for (final entry in modules.entries) {
+        final modKey = entry.key.toString();
+        final modMeta = entry.value;
+        final String title =
+            (modMeta is Map ? modMeta['title']?.toString() : '') ?? '';
+        final items = data[modKey];
+
+        if (items is! List || items.isEmpty) continue;
+
+        // 1. Check if the module title explicitly references this language
+        final bool hasLangTitle = title.toLowerCase().contains(langLower);
+
+        // 2. Check if individual items have matching language tags
+        final bool hasLangItems = items.any((item) {
+          if (item is! Map) return false;
+          final itemLang = (item['language'] ??
+                  item['more_info']?['language'] ??
+                  item['more_info']?['editorial_language'])
+              ?.toString()
+              .toLowerCase();
+          return itemLang == langLower;
+        });
+
+        if (hasLangTitle || hasLangItems) {
+          langItemsCount += items.length;
+        }
+      }
+
+      if (langItemsCount > 0) {
+        return LanguageAvailability.available;
+      }
+      return LanguageAvailability.unavailable;
+    } catch (e) {
+      Logger.root.severe('Error determining availability for $language: $e');
+      return LanguageAvailability.unknown;
+    }
+  }
+
+  /// Check availability of a specific language with 24-hour Hive caching.
+  Future<LanguageAvailability> checkLanguageAvailability(
+    String language, {
+    bool forceRefresh = false,
+  }) async {
+    final String langNormalized = language.trim();
+    final String langKey = langNormalized.toLowerCase();
+
+    // 1. Check cache if not forcing refresh
+    if (!forceRefresh && Hive.isBoxOpen('cache')) {
+      final cacheBox = Hive.box('cache');
+      final Map cachedAvail = (cacheBox.get('languageAvailability', defaultValue: {}) as Map?) ?? {};
+      if (cachedAvail.containsKey(langKey)) {
+        final entry = cachedAvail[langKey];
+        if (entry is Map) {
+          final int timestamp = (entry['timestamp'] as int?) ?? 0;
+          final int now = DateTime.now().millisecondsSinceEpoch;
+          if (now - timestamp < availabilityCacheTtl.inMilliseconds) {
+            final String status = entry['status']?.toString() ?? '';
+            if (status == 'available') return LanguageAvailability.available;
+            if (status == 'unavailable') return LanguageAvailability.unavailable;
+          }
+        }
+      }
+    }
+
+    // 2. Query JioSaavn launchData isolated to this language
+    try {
+      final Uri url = Uri.parse('https://$baseUrl$apiStr&${endpoints['homeData']}');
+      final Map<String, String> reqHeaders = {
+        'cookie': 'L=$langKey',
+        'Accept': '*/*',
+        'User-Agent': 'Mozilla/5.0',
+      };
+
+      final res = await get(url, headers: reqHeaders)
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode != 200) {
+        Logger.root.warning('checkLanguageAvailability HTTP ${res.statusCode} for $language');
+        return LanguageAvailability.unknown;
+      }
+
+      final dynamic decoded = json.decode(utf8.decode(res.bodyBytes));
+      if (decoded is! Map) {
+        return LanguageAvailability.unknown;
+      }
+
+      final availability = determineAvailabilityFromLaunchData(decoded, langNormalized);
+
+      // Only cache confirmed 'available' or 'unavailable' (transient 'unknown' is NOT cached)
+      if (availability != LanguageAvailability.unknown && Hive.isBoxOpen('cache')) {
+        try {
+          final cacheBox = Hive.box('cache');
+          final Map cachedAvail = Map<String, dynamic>.from(
+            (cacheBox.get('languageAvailability', defaultValue: {}) as Map?) ?? {},
+          );
+          cachedAvail[langKey] = {
+            'status': availability == LanguageAvailability.available ? 'available' : 'unavailable',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          };
+          await cacheBox.put('languageAvailability', cachedAvail);
+        } catch (e) {
+          Logger.root.severe('Error saving language availability cache: $e');
+        }
+      }
+
+      return availability;
+    } catch (e) {
+      Logger.root.severe('Error in checkLanguageAvailability for $language: $e');
+      return LanguageAvailability.unknown;
+    }
+  }
+
+  /// Concurrently validate multiple languages with bounded concurrency (3 max)
+  Future<Map<String, LanguageAvailability>> validateLanguages(
+    List<String> languages, {
+    bool forceRefresh = false,
+  }) async {
+    final Map<String, LanguageAvailability> results = {};
+    if (languages.isEmpty) return results;
+
+    for (int i = 0; i < languages.length; i += 3) {
+      final end = (i + 3 < languages.length) ? i + 3 : languages.length;
+      final batch = languages.sublist(i, end);
+      final futures = batch.map((lang) async {
+        final avail = await checkLanguageAvailability(lang, forceRefresh: forceRefresh);
+        return MapEntry(lang, avail);
+      });
+      final batchResults = await Future.wait(futures);
+      for (final entry in batchResults) {
+        results[entry.key] = entry.value;
+      }
+    }
+    return results;
+  }
+
   Future<Response> getResponse(
     String params, {
     bool usev4 = true,
@@ -62,8 +219,12 @@ class SaavnAPI {
         : '$apiStr&$params'.replaceAll('&api_version=4', '');
     final Uri url = Uri.parse('https://$baseUrl$query');
 
+    if (Hive.isBoxOpen('settings')) {
+      preferredLanguages = Hive.box('settings')
+          .get('preferredLanguage', defaultValue: ['Hindi']) as List;
+    }
     preferredLanguages =
-        preferredLanguages.map((lang) => lang.toLowerCase()).toList();
+        preferredLanguages.map((lang) => lang.toString().toLowerCase()).toList();
     final String languageHeader = 'L=${preferredLanguages.join('%2C')}';
     headers = {'cookie': languageHeader, 'Accept': '*/*'};
 

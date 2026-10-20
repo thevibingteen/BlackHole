@@ -258,6 +258,31 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
           : null;
     }).whereType<MediaItem>().distinct().listen(mediaItem.add);
 
+    _player!.durationStream.listen((duration) {
+      if (duration != null && duration > Duration.zero) {
+        final current = mediaItem.value;
+        if (current != null &&
+            (current.duration == null || current.duration == Duration.zero)) {
+          final updated = current.copyWith(duration: duration);
+          mediaItem.add(updated);
+
+          final currentQueue = queue.value;
+          final idx =
+              currentQueue.indexWhere((item) => item.id == current.id);
+          if (idx != -1) {
+            currentQueue[idx] = updated;
+            queue.add(List.from(currentQueue));
+          }
+          if (_player?.currentIndex != null &&
+              _player?.sequence != null &&
+              _player!.currentIndex! < _player!.sequence!.length) {
+            final currentSource = _player!.sequence![_player!.currentIndex!];
+            _mediaItemExpando[currentSource] = updated;
+          }
+        }
+      }
+    });
+
     // Propagate all events from the audio player to AudioService clients.
     _player!.playbackEventStream.listen(
       _broadcastState,
@@ -521,9 +546,25 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
             );
             return null;
           }
+          final itemType = mediaItem.extras?['type']?.toString().toLowerCase();
+          final isShowOrEpisode = itemType == 'show' ||
+              itemType == 'episode' ||
+              itemType == 'podcast';
+          final has320 = mediaItem.extras?['320kbps'] == true ||
+              mediaItem.extras?['320kbps'] == 'true';
+          final multiBr = mediaItem.extras?['multi_br'] != false &&
+              mediaItem.extras?['multi_br'] != 'false';
+
+          String qualityToUse = preferredQuality.replaceAll(' kbps', '');
+          if (isShowOrEpisode || !multiBr) {
+            qualityToUse = '96';
+          } else if (qualityToUse == '320' && !has320) {
+            qualityToUse = '160';
+          }
+
           final String formattedUrl = rawMediaUrl.replaceAll(
             '_96.',
-            "_${preferredQuality.replaceAll(' kbps', '')}.",
+            '_$qualityToUse.',
           );
           if (cacheSong) {
             audioSource = LockCachingAudioSource(

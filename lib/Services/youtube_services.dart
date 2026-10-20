@@ -85,6 +85,71 @@ class YouTubeServices {
   final YoutubeExplode yt = YoutubeExplode();
   final Map<String, Future<List<String>>> _inFlightStreamRequests = {};
 
+  static String extractThumbnailUrl(
+    dynamic raw, {
+    String? videoId,
+    int index = -1,
+  }) {
+    List candidateList = [];
+
+    if (raw is List) {
+      candidateList = raw;
+    } else if (raw is Map) {
+      if (raw['thumbnails'] is List) {
+        candidateList = raw['thumbnails'] as List;
+      } else if (raw['sources'] is List) {
+        candidateList = raw['sources'] as List;
+      } else if (raw['image'] is Map && raw['image']['sources'] is List) {
+        candidateList = raw['image']['sources'] as List;
+      } else if (raw['url'] != null) {
+        candidateList = [raw];
+      }
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      String url = raw.trim();
+      if (url.startsWith('//')) {
+        url = 'https:$url';
+      }
+      return url;
+    }
+
+    final flattened = <dynamic>[];
+    for (final item in candidateList) {
+      if (item is List) {
+        flattened.addAll(item);
+      } else if (item != null) {
+        flattened.add(item);
+      }
+    }
+
+    if (flattened.isNotEmpty) {
+      Map? chosen;
+      if (index >= 0 && index < flattened.length) {
+        chosen = flattened[index] is Map ? flattened[index] as Map : null;
+      } else {
+        final target = (index < 0) ? flattened.last : flattened.first;
+        chosen = target is Map ? target as Map : null;
+      }
+
+      final rawUrl = chosen?['url']?.toString().trim();
+      if (rawUrl != null && rawUrl.isNotEmpty) {
+        if (rawUrl.startsWith('//')) {
+          return 'https:$rawUrl';
+        }
+        return rawUrl;
+      }
+    }
+
+    if (videoId != null &&
+        videoId.length == 11 &&
+        !videoId.startsWith('PL') &&
+        !videoId.startsWith('RD') &&
+        !videoId.startsWith('UC')) {
+      return 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
+    }
+
+    return '';
+  }
+
   Future<List<Video>> getPlaylistSongs(String id) async {
     try {
       final List<Video> results = await yt.playlists
@@ -477,24 +542,39 @@ class YouTubeServices {
   List formatVideoItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final renderer = (e is Map ? e['gridVideoRenderer'] : null) as Map? ?? {};
+        final videoId = renderer['videoId']?.toString() ?? '';
+        final thumbs = renderer['thumbnail'];
+
+        final imageMax =
+            extractThumbnailUrl(thumbs, videoId: videoId, index: -1);
+        final imageMin =
+            extractThumbnailUrl(thumbs, videoId: videoId, index: 0);
+        final imageMed =
+            extractThumbnailUrl(thumbs, videoId: videoId, index: 1);
+        final imageStd =
+            extractThumbnailUrl(thumbs, videoId: videoId, index: 2);
+
+        final String title = renderer['title']?['simpleText']?.toString() ??
+            renderer['title']?['runs']?[0]?['text']?.toString() ??
+            '';
+        final String desc =
+            renderer['shortBylineText']?['runs']?[0]?['text']?.toString() ?? '';
+        final String count =
+            renderer['shortViewCountText']?['simpleText']?.toString() ?? '';
+
         return {
-          'title': e['gridVideoRenderer']['title']['simpleText'],
+          'title': title,
           'type': 'video',
-          'description': e['gridVideoRenderer']['shortBylineText']['runs'][0]
-              ['text'],
-          'count': e['gridVideoRenderer']['shortViewCountText']['simpleText'],
-          'videoId': e['gridVideoRenderer']['videoId'],
-          'firstItemId': e['gridVideoRenderer']['videoId'],
-          'image':
-              e['gridVideoRenderer']['thumbnail']['thumbnails'].last['url'],
-          'imageMin': e['gridVideoRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageMedium': e['gridVideoRenderer']['thumbnail']['thumbnails'][1]
-              ['url'],
-          'imageStandard': e['gridVideoRenderer']['thumbnail']['thumbnails'][2]
-              ['url'],
-          'imageMax':
-              e['gridVideoRenderer']['thumbnail']['thumbnails'].last['url'],
+          'description': desc,
+          'count': count,
+          'videoId': videoId,
+          'firstItemId': videoId,
+          'image': imageMax,
+          'imageMin': imageMin.isNotEmpty ? imageMin : imageMax,
+          'imageMedium': imageMed.isNotEmpty ? imageMed : imageMax,
+          'imageStandard': imageStd.isNotEmpty ? imageStd : imageMax,
+          'imageMax': imageMax,
         };
       }).toList();
 
@@ -508,25 +588,37 @@ class YouTubeServices {
   List formatChartItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final renderer =
+            (e is Map ? e['gridPlaylistRenderer'] : null) as Map? ?? {};
+        final firstItemId = renderer['navigationEndpoint']?['watchEndpoint']
+                ?['videoId']
+            ?.toString();
+        final playlistId = renderer['navigationEndpoint']?['watchEndpoint']
+                ?['playlistId']
+            ?.toString() ??
+            '';
+        final thumbs = renderer['thumbnail'];
+
+        final img = extractThumbnailUrl(thumbs, videoId: firstItemId, index: -1);
+
+        final String title =
+            renderer['title']?['runs']?[0]?['text']?.toString() ?? '';
+        final String desc =
+            renderer['shortBylineText']?['runs']?[0]?['text']?.toString() ?? '';
+        final String count =
+            renderer['videoCountText']?['runs']?[0]?['text']?.toString() ?? '';
+
         return {
-          'title': e['gridPlaylistRenderer']['title']['runs'][0]['text'],
+          'title': title,
           'type': 'chart',
-          'description': e['gridPlaylistRenderer']['shortBylineText']['runs'][0]
-              ['text'],
-          'count': e['gridPlaylistRenderer']['videoCountText']['runs'][0]
-              ['text'],
-          'playlistId': e['gridPlaylistRenderer']['navigationEndpoint']
-              ['watchEndpoint']['playlistId'],
-          'firstItemId': e['gridPlaylistRenderer']['navigationEndpoint']
-              ['watchEndpoint']['videoId'],
-          'image': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageMedium': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageStandard': e['gridPlaylistRenderer']['thumbnail']['thumbnails']
-              [0]['url'],
-          'imageMax': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
+          'description': desc,
+          'count': count,
+          'playlistId': playlistId,
+          'firstItemId': firstItemId ?? '',
+          'image': img,
+          'imageMedium': img,
+          'imageStandard': img,
+          'imageMax': img,
         };
       }).toList();
 
@@ -540,25 +632,37 @@ class YouTubeServices {
   List formatItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final renderer =
+            (e is Map ? e['gridPlaylistRenderer'] : null) as Map? ?? {};
+        final firstItemId = renderer['navigationEndpoint']?['watchEndpoint']
+                ?['videoId']
+            ?.toString();
+        final playlistId = renderer['navigationEndpoint']?['watchEndpoint']
+                ?['playlistId']
+            ?.toString() ??
+            '';
+        final thumbs = renderer['thumbnail'];
+
+        final img = extractThumbnailUrl(thumbs, videoId: firstItemId, index: -1);
+
+        final String title =
+            renderer['title']?['runs']?[0]?['text']?.toString() ?? '';
+        final String desc =
+            renderer['shortBylineText']?['runs']?[0]?['text']?.toString() ?? '';
+        final String count =
+            renderer['videoCountText']?['runs']?[0]?['text']?.toString() ?? '';
+
         return {
-          'title': e['gridPlaylistRenderer']['title']['runs'][0]['text'],
+          'title': title,
           'type': 'playlist',
-          'description': e['gridPlaylistRenderer']['shortBylineText']['runs'][0]
-              ['text'],
-          'count': e['gridPlaylistRenderer']['videoCountText']['runs'][0]
-              ['text'],
-          'playlistId': e['gridPlaylistRenderer']['navigationEndpoint']
-              ['watchEndpoint']['playlistId'],
-          'firstItemId': e['gridPlaylistRenderer']['navigationEndpoint']
-              ['watchEndpoint']['videoId'],
-          'image': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageMedium': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageStandard': e['gridPlaylistRenderer']['thumbnail']['thumbnails']
-              [0]['url'],
-          'imageMax': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
+          'description': desc,
+          'count': count,
+          'playlistId': playlistId,
+          'firstItemId': firstItemId ?? '',
+          'image': img,
+          'imageMedium': img,
+          'imageStandard': img,
+          'imageMax': img,
         };
       }).toList();
 
@@ -572,33 +676,35 @@ class YouTubeServices {
   List formatHeadItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final renderer =
+            (e is Map ? e['defaultPromoPanelRenderer'] : null) as Map? ?? {};
+        final videoId = renderer['navigationEndpoint']?['watchEndpoint']
+                ?['videoId']
+            ?.toString();
+        final thumbs = renderer['largeFormFactorBackgroundThumbnail']
+            ?['thumbnailLandscapePortraitRenderer']?['landscape']?['thumbnails'];
+
+        final imgMax = extractThumbnailUrl(thumbs, videoId: videoId, index: -1);
+        final imgMin = extractThumbnailUrl(thumbs, videoId: videoId, index: 0);
+        final imgMed = extractThumbnailUrl(thumbs, videoId: videoId, index: 1);
+        final imgStd = extractThumbnailUrl(thumbs, videoId: videoId, index: 2);
+
+        final String title =
+            renderer['title']?['runs']?[0]?['text']?.toString() ?? '';
+        final String desc = ((renderer['description']?['runs'] as List?) ?? [])
+            .map((e) => e is Map ? e['text']?.toString() ?? '' : e.toString())
+            .toList()
+            .join();
+
         return {
-          'title': e['defaultPromoPanelRenderer']['title']['runs'][0]['text'],
+          'title': title,
           'type': 'video',
-          'description':
-              (e['defaultPromoPanelRenderer']['description']['runs'] as List)
-                  .map((e) => e['text'])
-                  .toList()
-                  .join(),
-          'navigationEndpoint': e['defaultPromoPanelRenderer']
-              ['navigationEndpoint']['watchEndpoint']['videoId'],
-          'image': e['defaultPromoPanelRenderer']
-                      ['largeFormFactorBackgroundThumbnail']
-                  ['thumbnailLandscapePortraitRenderer']['landscape']
-              ['thumbnails'][0]['url'],
-          'imageMedium': e['defaultPromoPanelRenderer']
-                      ['largeFormFactorBackgroundThumbnail']
-                  ['thumbnailLandscapePortraitRenderer']['landscape']
-              ['thumbnails'][1]['url'],
-          'imageStandard': e['defaultPromoPanelRenderer']
-                      ['largeFormFactorBackgroundThumbnail']
-                  ['thumbnailLandscapePortraitRenderer']['landscape']
-              ['thumbnails'][2]['url'],
-          'imageMax': e['defaultPromoPanelRenderer']
-                          ['largeFormFactorBackgroundThumbnail']
-                      ['thumbnailLandscapePortraitRenderer']['landscape']
-                  ['thumbnails']
-              .last['url'],
+          'description': desc,
+          'navigationEndpoint': videoId ?? '',
+          'image': imgMin.isNotEmpty ? imgMin : imgMax,
+          'imageMedium': imgMed.isNotEmpty ? imgMed : imgMax,
+          'imageStandard': imgStd.isNotEmpty ? imgStd : imgMax,
+          'imageMax': imgMax,
         };
       }).toList();
 
@@ -736,8 +842,18 @@ class YouTubeServices {
       'artist': (data?['artist'] ?? '') != ''
           ? data!['artist']
           : video.author.replaceAll('- Topic', '').trim(),
-      'image': video.thumbnails.maxResUrl,
-      'secondImage': video.thumbnails.highResUrl,
+      'image': extractThumbnailUrl(
+        video.thumbnails.maxResUrl.isNotEmpty
+            ? video.thumbnails.maxResUrl
+            : video.thumbnails.highResUrl,
+        videoId: video.id.value,
+      ),
+      'secondImage': extractThumbnailUrl(
+        video.thumbnails.highResUrl.isNotEmpty
+            ? video.thumbnails.highResUrl
+            : video.thumbnails.standardResUrl,
+        videoId: video.id.value,
+      ),
       'language': 'YouTube',
       'genre': 'YouTube',
       'expire_at': expireAt,
@@ -855,10 +971,10 @@ class YouTubeServices {
                 vid['lengthText']?['simpleText']?.toString() ??
                     vid['lengthText']?['runs']?[0]?['text']?.toString() ??
                     '180';
-            final List thumbs =
-                (vid['thumbnail']?['thumbnails'] as List?) ?? [];
-            final String thumbUrl =
-                thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+            final String thumbUrl = extractThumbnailUrl(
+              vid['thumbnail']?['thumbnails'],
+              videoId: videoId,
+            );
 
             if (title.isNotEmpty) {
               results.add({
@@ -1143,10 +1259,10 @@ class YouTubeServices {
       }
     }
 
-    final List thumbs =
-        (videoDetails?['thumbnail']?['thumbnails'] as List?) ?? [];
-    final String thumbUrl =
-        thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+    final String thumbUrl = extractThumbnailUrl(
+      videoDetails?['thumbnail']?['thumbnails'],
+      videoId: id,
+    );
 
     final String title = (data?['title']?.toString() ?? '').isNotEmpty
         ? data!['title'].toString()
