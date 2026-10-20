@@ -1,3 +1,7 @@
+import 'package:blackhole/Helpers/app_links.dart';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/Helpers/format.dart';
@@ -937,7 +941,9 @@ void main() {
   });
 
   group('YouTube Diagnostics, Stream Repair & Quality Selection Tests', () {
-    test('YT Music search parsing injects YouTube genre and perma_url for playback readiness', () {
+    test(
+        'YT Music search parsing injects YouTube genre and perma_url for playback readiness',
+        () {
       final service = YtMusicService();
       final mockItem = {
         'musicResponsiveListItemRenderer': {
@@ -972,8 +978,16 @@ void main() {
             'musicThumbnailRenderer': {
               'thumbnail': {
                 'thumbnails': [
-                  {'url': 'https://lh3.googleusercontent.com/test_120.jpg', 'width': 120, 'height': 120},
-                  {'url': 'https://lh3.googleusercontent.com/test_544.jpg', 'width': 544, 'height': 544}
+                  {
+                    'url': 'https://lh3.googleusercontent.com/test_120.jpg',
+                    'width': 120,
+                    'height': 120
+                  },
+                  {
+                    'url': 'https://lh3.googleusercontent.com/test_544.jpg',
+                    'width': 544,
+                    'height': 544
+                  }
                 ]
               }
             }
@@ -988,11 +1002,14 @@ void main() {
       expect(parsed['artist'], equals('Anuv Jain'));
       expect(parsed['genre'], equals('YouTube'));
       expect(parsed['language'], equals('YouTube'));
-      expect(parsed['perma_url'], equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
+      expect(parsed['perma_url'],
+          equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
       expect(parsed['expire_at'], equals('0'));
     });
 
-    test('MediaItemConverter preserves YouTube genre and extracts perma_url/expire_at', () {
+    test(
+        'MediaItemConverter preserves YouTube genre and extracts perma_url/expire_at',
+        () {
       final ytItem = {
         'id': 'gJLVTKhTnog',
         'title': 'Husn',
@@ -1003,9 +1020,12 @@ void main() {
         'genre': 'YouTube',
         'language': 'YouTube',
         'perma_url': 'https://www.youtube.com/watch?v=gJLVTKhTnog',
-        'url': 'https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&expire=1792445511',
-        'lowUrl': 'https://rr1---sn-test.googlevideo.com/videoplayback?itag=249&expire=1792445511',
-        'highUrl': 'https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&expire=1792445511',
+        'url':
+            'https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&expire=1792445511',
+        'lowUrl':
+            'https://rr1---sn-test.googlevideo.com/videoplayback?itag=249&expire=1792445511',
+        'highUrl':
+            'https://rr1---sn-test.googlevideo.com/videoplayback?itag=140&expire=1792445511',
         'expire_at': '1792445511',
       };
 
@@ -1017,22 +1037,33 @@ void main() {
       expect(mediaItem.extras!['language'], equals('YouTube'));
       expect(mediaItem.extras!['lowUrl'], contains('itag=249'));
       expect(mediaItem.extras!['highUrl'], contains('itag=140'));
-      expect(mediaItem.extras!['perma_url'], equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
+      expect(mediaItem.extras!['perma_url'],
+          equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
     });
 
-    test('Audio source quality selection selects lowUrl for Low and highUrl for High', () {
-      const lowUrl = 'https://stream.googlevideo.com/videoplayback?itag=249&expire=1792445511';
-      const highUrl = 'https://stream.googlevideo.com/videoplayback?itag=140&expire=1792445511';
-      const rawUrl = 'https://stream.googlevideo.com/videoplayback?itag=18&expire=1792445511';
+    test(
+        'Audio source quality selection selects lowUrl for Low and highUrl for High',
+        () {
+      const lowUrl =
+          'https://stream.googlevideo.com/videoplayback?itag=249&expire=1792445511';
+      const highUrl =
+          'https://stream.googlevideo.com/videoplayback?itag=140&expire=1792445511';
+      const rawUrl =
+          'https://stream.googlevideo.com/videoplayback?itag=18&expire=1792445511';
 
-      String selectStream(String quality, {required String low, required String high, required String fallback}) {
+      String selectStream(String quality,
+          {required String low,
+          required String high,
+          required String fallback}) {
         return (quality == 'High' && high.isNotEmpty)
             ? high
             : (low.isNotEmpty ? low : fallback);
       }
 
-      final lowSelected = selectStream('Low', low: lowUrl, high: highUrl, fallback: rawUrl);
-      final highSelected = selectStream('High', low: lowUrl, high: highUrl, fallback: rawUrl);
+      final lowSelected =
+          selectStream('Low', low: lowUrl, high: highUrl, fallback: rawUrl);
+      final highSelected =
+          selectStream('High', low: lowUrl, high: highUrl, fallback: rawUrl);
 
       expect(lowSelected, equals(lowUrl));
       expect(lowSelected, contains('itag=249'));
@@ -1040,9 +1071,14 @@ void main() {
       expect(highSelected, contains('itag=140'));
     });
 
-    test('Audio source rejects empty or "null" URL safely to prevent player buffering stall', () {
+    test(
+        'Audio source rejects empty or "null" URL safely to prevent player buffering stall',
+        () {
       bool canConstructSource(String? url) {
-        if (url == null || url.isEmpty || url == 'null' || url.contains('watch?v=')) {
+        if (url == null ||
+            url.isEmpty ||
+            url == 'null' ||
+            url.contains('watch?v=')) {
           return false;
         }
         return true;
@@ -1051,16 +1087,23 @@ void main() {
       expect(canConstructSource(null), isFalse);
       expect(canConstructSource(''), isFalse);
       expect(canConstructSource('null'), isFalse);
-      expect(canConstructSource('https://www.youtube.com/watch?v=123'), isFalse);
-      expect(canConstructSource('https://rr1.googlevideo.com/videoplayback?itag=140'), isTrue);
-      expect(canConstructSource('https://aac.saavncdn.com/123/song_320.mp4'), isTrue);
+      expect(
+          canConstructSource('https://www.youtube.com/watch?v=123'), isFalse);
+      expect(
+          canConstructSource(
+              'https://rr1.googlevideo.com/videoplayback?itag=140'),
+          isTrue);
+      expect(canConstructSource('https://aac.saavncdn.com/123/song_320.mp4'),
+          isTrue);
     });
 
     test('Sanitized diagnostics redact query parameters and signed URLs', () {
-      const signedUrl = 'https://rr2---sn-4g5lzney.googlevideo.com/videoplayback?expire=1792445511&ei=abc&ip=1.2.3.4&id=o-123&itag=140&source=youtube&requiressl=yes&vprv=1&sig=AOq0QJ8wRAIgEXAMPLE_SIGNATURE_SECRET';
+      const signedUrl =
+          'https://rr2---sn-4g5lzney.googlevideo.com/videoplayback?expire=1792445511&ei=abc&ip=1.2.3.4&id=o-123&itag=140&source=youtube&requiressl=yes&vprv=1&sig=AOq0QJ8wRAIgEXAMPLE_SIGNATURE_SECRET';
       final uri = Uri.parse(signedUrl);
 
-      final sanitizedLog = '[Stage 2: Manifest Extraction] Succeeded | Host: ${uri.host} | Path: ${uri.path} | itag: ${uri.queryParameters['itag']} | expires: ${uri.queryParameters['expire']}';
+      final sanitizedLog =
+          '[Stage 2: Manifest Extraction] Succeeded | Host: ${uri.host} | Path: ${uri.path} | itag: ${uri.queryParameters['itag']} | expires: ${uri.queryParameters['expire']}';
 
       expect(sanitizedLog, contains('itag: 140'));
       expect(sanitizedLog, contains('expires: 1792445511'));
@@ -1069,7 +1112,9 @@ void main() {
       expect(sanitizedLog, isNot(contains('ip=')));
     });
 
-    test('JioSaavn chart playlists map contains only verified regional/language charts', () {
+    test(
+        'JioSaavn chart playlists map contains only verified regional/language charts',
+        () {
       const charts = {
         'India Superhits Top 50': '1134548194',
         'Trending Today': '110858205',
@@ -1086,8 +1131,11 @@ void main() {
     });
   });
 
-  group('YouTube Home Card Endpoint Parsing & Downstream Playlist Loading Tests', () {
-    test('parses lockupViewModel with playlist endpoint into playlist card', () {
+  group(
+      'YouTube Home Card Endpoint Parsing & Downstream Playlist Loading Tests',
+      () {
+    test('parses lockupViewModel with playlist endpoint into playlist card',
+        () {
       final Map<String, dynamic> mockLvm = {
         'contentId': 'RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0',
         'contentType': 'LOCKUP_CONTENT_TYPE_PLAYLIST',
@@ -1101,7 +1149,9 @@ void main() {
                 'metadataRows': [
                   {
                     'metadataParts': [
-                      {'text': {'content': 'Playlist • 50 tracks'}}
+                      {
+                        'text': {'content': 'Playlist • 50 tracks'}
+                      }
                     ]
                   }
                 ]
@@ -1131,10 +1181,14 @@ void main() {
         }
       };
 
-      final cmd = ((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] != null
-          ? (((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] as Map)['innertubeCommand'] as Map
+      final cmd = ((mockLvm['rendererContext'] as Map)['commandContext']
+                  as Map)['onTap'] !=
+              null
+          ? (((mockLvm['rendererContext'] as Map)['commandContext']
+              as Map)['onTap'] as Map)['innertubeCommand'] as Map
           : {};
-      String? playlistId = cmd['watchPlaylistEndpoint']?['playlistId']?.toString();
+      String? playlistId =
+          cmd['watchPlaylistEndpoint']?['playlistId']?.toString();
       playlistId ??= cmd['watchEndpoint']?['playlistId']?.toString();
       playlistId ??= cmd['browseEndpoint']?['browseId']?.toString();
       final String contentType = mockLvm['contentType']?.toString() ?? '';
@@ -1142,7 +1196,9 @@ void main() {
 
       String itemType = 'playlist';
       if (contentType == 'LOCKUP_CONTENT_TYPE_VIDEO' ||
-          (videoId != null && videoId.isNotEmpty && (playlistId == null || playlistId.isEmpty))) {
+          (videoId != null &&
+              videoId.isNotEmpty &&
+              (playlistId == null || playlistId.isEmpty))) {
         itemType = 'video';
         playlistId = '';
       } else if (playlistId != null && playlistId.isNotEmpty) {
@@ -1153,7 +1209,9 @@ void main() {
       expect(playlistId, equals('RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0'));
     });
 
-    test('parses lockupViewModel with video endpoint as video card and does not treat as playlist', () {
+    test(
+        'parses lockupViewModel with video endpoint as video card and does not treat as playlist',
+        () {
       final Map<String, dynamic> mockLvm = {
         'contentId': 'dQw4w9WgXcQ',
         'contentType': 'LOCKUP_CONTENT_TYPE_VIDEO',
@@ -1166,19 +1224,21 @@ void main() {
           'commandContext': {
             'onTap': {
               'innertubeCommand': {
-                'watchEndpoint': {
-                  'videoId': 'dQw4w9WgXcQ'
-                }
+                'watchEndpoint': {'videoId': 'dQw4w9WgXcQ'}
               }
             }
           }
         }
       };
 
-      final cmd = ((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] != null
-          ? (((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] as Map)['innertubeCommand'] as Map
+      final cmd = ((mockLvm['rendererContext'] as Map)['commandContext']
+                  as Map)['onTap'] !=
+              null
+          ? (((mockLvm['rendererContext'] as Map)['commandContext']
+              as Map)['onTap'] as Map)['innertubeCommand'] as Map
           : {};
-      String? playlistId = cmd['watchPlaylistEndpoint']?['playlistId']?.toString();
+      String? playlistId =
+          cmd['watchPlaylistEndpoint']?['playlistId']?.toString();
       playlistId ??= cmd['watchEndpoint']?['playlistId']?.toString();
       playlistId ??= cmd['browseEndpoint']?['browseId']?.toString();
       final String contentType = mockLvm['contentType']?.toString() ?? '';
@@ -1186,7 +1246,9 @@ void main() {
 
       String itemType = 'playlist';
       if (contentType == 'LOCKUP_CONTENT_TYPE_VIDEO' ||
-          (videoId != null && videoId.isNotEmpty && (playlistId == null || playlistId.isEmpty))) {
+          (videoId != null &&
+              videoId.isNotEmpty &&
+              (playlistId == null || playlistId.isEmpty))) {
         itemType = 'video';
         playlistId = '';
       } else if (playlistId != null && playlistId.isNotEmpty) {
@@ -1198,7 +1260,9 @@ void main() {
       expect(videoId, equals('dQw4w9WgXcQ'));
     });
 
-    test('parses modern twoColumnBrowseResultsRenderer playlist details response fixture', () {
+    test(
+        'parses modern twoColumnBrowseResultsRenderer playlist details response fixture',
+        () {
       final mockBrowseResponse = {
         'contents': {
           'twoColumnBrowseResultsRenderer': {
@@ -1235,7 +1299,10 @@ void main() {
                               'musicThumbnailRenderer': {
                                 'thumbnail': {
                                   'thumbnails': [
-                                    {'url': 'https://lh3.googleusercontent.com/pl_thumb.jpg'}
+                                    {
+                                      'url':
+                                          'https://lh3.googleusercontent.com/pl_thumb.jpg'
+                                    }
                                   ]
                                 }
                               }
@@ -1285,7 +1352,10 @@ void main() {
                               'musicThumbnailRenderer': {
                                 'thumbnail': {
                                   'thumbnails': [
-                                    {'url': 'https://lh3.googleusercontent.com/song_thumb.jpg'}
+                                    {
+                                      'url':
+                                          'https://lh3.googleusercontent.com/song_thumb.jpg'
+                                    }
                                   ]
                                 }
                               }
@@ -1302,31 +1372,43 @@ void main() {
         }
       };
 
-      final twoCol = mockBrowseResponse['contents']!['twoColumnBrowseResultsRenderer'] as Map;
-      final tab0 = (twoCol['tabs'] as List)[0]['tabRenderer']['content']['sectionListRenderer']['contents'] as List;
+      final twoCol =
+          mockBrowseResponse['contents']!['twoColumnBrowseResultsRenderer']
+              as Map;
+      final tab0 = (twoCol['tabs'] as List)[0]['tabRenderer']['content']
+          ['sectionListRenderer']['contents'] as List;
       final header = tab0[0]['musicResponsiveHeaderRenderer'] as Map;
       final heading = (header['title']['runs'] as List)[0]['text'];
-      final subtitle = (header['subtitle']['runs'] as List).map((e) => e['text']).join();
-      final description = (header['description']['musicDescriptionShelfRenderer']['description']['runs'] as List)[0]['text'];
+      final subtitle =
+          (header['subtitle']['runs'] as List).map((e) => e['text']).join();
+      final description = (header['description']
+              ['musicDescriptionShelfRenderer']['description']['runs']
+          as List)[0]['text'];
 
       expect(heading, equals('इश्क़ है सुकून (Ishq Hai Sukoon)'));
       expect(subtitle, equals('Playlist • 2026'));
       expect(description, equals('Tranquil, soulful watches.'));
 
-      final secContents = twoCol['secondaryContents']['sectionListRenderer']['contents'] as List;
+      final secContents = twoCol['secondaryContents']['sectionListRenderer']
+          ['contents'] as List;
       final shelf = secContents[0]['musicPlaylistShelfRenderer'] as Map;
       final items = shelf['contents'] as List;
       expect(items.length, equals(1));
 
       final firstItem = items[0]['musicResponsiveListItemRenderer'] as Map;
       expect(firstItem['playlistItemData']['videoId'], equals('V7LwfY5U5WI'));
-      final trackTitle = (firstItem['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List)[0]['text'];
+      final trackTitle = (firstItem['flexColumns'][0]
+              ['musicResponsiveListItemFlexColumnRenderer']['text']['runs']
+          as List)[0]['text'];
       expect(trackTitle, equals('Ranjha (ਰਾਝਾਂ)'));
     });
   });
 
-  group('YouTube Stream Candidate Model, Quality Selection & Fallbacks Tests', () {
-    test('YouTubeStreamCandidate selection sorts candidates by bitrate ascending', () {
+  group('YouTube Stream Candidate Model, Quality Selection & Fallbacks Tests',
+      () {
+    test(
+        'YouTubeStreamCandidate selection sorts candidates by bitrate ascending',
+        () {
       final candidates = [
         YouTubeStreamCandidate(
           videoId: 'testVid',
@@ -1433,7 +1515,9 @@ void main() {
   });
 
   group('Top Charts Tab Bar Selector Visibility Tests', () {
-    test('selector visibility logic shows for Local (index 0) and hides for Global (index 1)', () {
+    test(
+        'selector visibility logic shows for Local (index 0) and hides for Global (index 1)',
+        () {
       bool isSelectorVisible(int tabIndex) {
         return tabIndex == 0;
       }
@@ -1444,7 +1528,9 @@ void main() {
     });
   });
   group('Feature A: Language Availability & Feed Personalization Tests', () {
-    test('determineAvailabilityFromLaunchData classifies available languages correctly', () {
+    test(
+        'determineAvailabilityFromLaunchData classifies available languages correctly',
+        () {
       final mockData = {
         'modules': {
           'promo:vx:data:127': {'title': 'Top Albums - Assamese'},
@@ -1453,11 +1539,14 @@ void main() {
           {'id': '1', 'title': 'Assamese Song', 'language': 'Assamese'}
         ]
       };
-      final avail = SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Assamese');
+      final avail =
+          SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Assamese');
       expect(avail, equals(LanguageAvailability.available));
     });
 
-    test('determineAvailabilityFromLaunchData classifies unavailable languages when items fallback', () {
+    test(
+        'determineAvailabilityFromLaunchData classifies unavailable languages when items fallback',
+        () {
       final mockData = {
         'modules': {
           'promo:vx:data:100': {'title': 'Top Bollywood Hits'},
@@ -1466,38 +1555,64 @@ void main() {
           {'id': '1', 'title': 'Hindi Song', 'language': 'hindi'}
         ]
       };
-      final avail = SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Urdu');
+      final avail =
+          SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Urdu');
       expect(avail, equals(LanguageAvailability.unavailable));
     });
 
-    test('determineAvailabilityFromLaunchData classifies unknown on empty or malformed data', () {
+    test(
+        'determineAvailabilityFromLaunchData classifies unknown on empty or malformed data',
+        () {
       expect(SaavnAPI.determineAvailabilityFromLaunchData({}, 'Hindi'),
           equals(LanguageAvailability.unknown));
-      expect(SaavnAPI.determineAvailabilityFromLaunchData({'modules': {}}, 'Hindi'),
+      expect(
+          SaavnAPI.determineAvailabilityFromLaunchData(
+              {'modules': {}}, 'Hindi'),
           equals(LanguageAvailability.unknown));
     });
 
-    test('isLanguageUnselected correctly identifies active vs unselected languages', () {
+    test(
+        'isLanguageUnselected correctly identifies active vs unselected languages',
+        () {
       final active = {'hindi', 'english'};
       expect(FormatResponse.isLanguageUnselected('hindi', active), isFalse);
       expect(FormatResponse.isLanguageUnselected('English', active), isFalse);
       expect(FormatResponse.isLanguageUnselected('Assamese', active), isTrue);
       expect(FormatResponse.isLanguageUnselected('odia', active), isTrue);
-      expect(FormatResponse.isLanguageUnselected('unknown_custom_lang', active), isFalse);
+      expect(FormatResponse.isLanguageUnselected('unknown_custom_lang', active),
+          isFalse);
     });
 
-    test('moduleMatchesUnselectedLanguage detects regional modules correctly', () {
+    test('moduleMatchesUnselectedLanguage detects regional modules correctly',
+        () {
       final active = {'hindi', 'english'};
-      expect(FormatResponse.moduleMatchesUnselectedLanguage('Top Albums - Assamese', active), isTrue);
-      expect(FormatResponse.moduleMatchesUnselectedLanguage('New Odia Releases', active), isTrue);
-      expect(FormatResponse.moduleMatchesUnselectedLanguage('Trending Hindi Songs', active), isFalse);
-      expect(FormatResponse.moduleMatchesUnselectedLanguage('Weekly English Top 20', active), isFalse);
-      expect(FormatResponse.moduleMatchesUnselectedLanguage('Radio Stations', active), isFalse);
+      expect(
+          FormatResponse.moduleMatchesUnselectedLanguage(
+              'Top Albums - Assamese', active),
+          isTrue);
+      expect(
+          FormatResponse.moduleMatchesUnselectedLanguage(
+              'New Odia Releases', active),
+          isTrue);
+      expect(
+          FormatResponse.moduleMatchesUnselectedLanguage(
+              'Trending Hindi Songs', active),
+          isFalse);
+      expect(
+          FormatResponse.moduleMatchesUnselectedLanguage(
+              'Weekly English Top 20', active),
+          isFalse);
+      expect(
+          FormatResponse.moduleMatchesUnselectedLanguage(
+              'Radio Stations', active),
+          isFalse);
     });
   });
 
   group('Bug 1: Empty Home Modules Suppression Tests', () {
-    test('buildHomeLists drops empty non-radio modules while keeping populated ones', () {
+    test(
+        'buildHomeLists drops empty non-radio modules while keeping populated ones',
+        () {
       final homeData = {
         'collections': ['top_albums_odia', 'top_hindi_hits', 'radio_stations'],
         'modules': {
@@ -1506,10 +1621,13 @@ void main() {
           'radio_stations': {'title': 'Radio Stations'},
         },
         'top_albums_odia': [],
-        'top_hindi_hits': [{'id': 'h1', 'title': 'Song 1'}],
+        'top_hindi_hits': [
+          {'id': 'h1', 'title': 'Song 1'}
+        ],
         'radio_stations': [],
       };
-      final lists = FormatResponse.buildHomeLists(homeData, {}, preferredLangs: {'hindi'});
+      final lists = FormatResponse.buildHomeLists(homeData, {},
+          preferredLangs: {'hindi'});
       expect(lists.contains('top_albums_odia'), isFalse);
       expect(lists.contains('top_hindi_hits'), isTrue);
     });
@@ -1521,10 +1639,15 @@ void main() {
           'assamese_promo': {'title': 'Top Albums - Assamese'},
           'hindi_promo': {'title': 'Top Albums - Hindi'},
         },
-        'assamese_promo': [{'id': 'a1', 'title': 'A Song'}],
-        'hindi_promo': [{'id': 'h1', 'title': 'H Song'}],
+        'assamese_promo': [
+          {'id': 'a1', 'title': 'A Song'}
+        ],
+        'hindi_promo': [
+          {'id': 'h1', 'title': 'H Song'}
+        ],
       };
-      final lists = FormatResponse.buildHomeLists(homeData, {}, preferredLangs: {'hindi'});
+      final lists = FormatResponse.buildHomeLists(homeData, {},
+          preferredLangs: {'hindi'});
       expect(lists.contains('assamese_promo'), isFalse);
       expect(lists.contains('hindi_promo'), isTrue);
     });
@@ -1539,7 +1662,8 @@ void main() {
       expect(FormatResponse.parseDuration('01:02:03'), equals('3723'));
     });
 
-    test('parseDuration rejects zero, negative, and invalid formats safely', () {
+    test('parseDuration rejects zero, negative, and invalid formats safely',
+        () {
       expect(FormatResponse.parseDuration(0), equals('0'));
       expect(FormatResponse.parseDuration(-10), equals('0'));
       expect(FormatResponse.parseDuration('0'), equals('0'));
@@ -1549,7 +1673,9 @@ void main() {
       expect(FormatResponse.parseDuration(null), equals('0'));
     });
 
-    test('formatSingleSongResponse falls back to top-level duration when more_info duration is missing or zero', () async {
+    test(
+        'formatSingleSongResponse falls back to top-level duration when more_info duration is missing or zero',
+        () async {
       final songWithoutMoreInfoDuration = {
         'id': 's1',
         'title': 'Promise',
@@ -1559,13 +1685,16 @@ void main() {
           'singers': 'Artist Name',
         }
       };
-      final formatted = await FormatResponse.formatSingleSongResponse(songWithoutMoreInfoDuration);
+      final formatted = await FormatResponse.formatSingleSongResponse(
+          songWithoutMoreInfoDuration);
       expect(formatted['duration'], equals('210'));
     });
   });
 
   group('Bug 3: Podcast Episode Metadata Hardening Tests', () {
-    test('formatSingleSongResponse falls back to show_title when artist is missing', () async {
+    test(
+        'formatSingleSongResponse falls back to show_title when artist is missing',
+        () async {
       final podcastEpisode = {
         'id': 'ep1',
         'type': 'episode',
@@ -1577,12 +1706,14 @@ void main() {
           'artistMap': {'artists': []},
         }
       };
-      final formatted = await FormatResponse.formatSingleSongResponse(podcastEpisode);
+      final formatted =
+          await FormatResponse.formatSingleSongResponse(podcastEpisode);
       expect(formatted['artist'], equals('Shri Krishna Amritvani'));
       expect(formatted['album'], equals('Shri Krishna Amritvani'));
     });
 
-    test('formatSingleSongResponse correctly marks 320kbps boolean flag', () async {
+    test('formatSingleSongResponse correctly marks 320kbps boolean flag',
+        () async {
       final podcast = {
         'id': 'ep1',
         'more_info': {
@@ -1598,19 +1729,25 @@ void main() {
           '320kbps': 'true',
         }
       };
-      final formattedSong = await FormatResponse.formatSingleSongResponse(highQualitySong);
+      final formattedSong =
+          await FormatResponse.formatSingleSongResponse(highQualitySong);
       expect(formattedSong['320kbps'], isTrue);
     });
   });
 
   group('Restored YouTube Subsystem & Media URL Hardening Tests', () {
     test('getImageUrl normalizes protocol-relative and http URLs', () {
-      expect(getImageUrl('//c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
-      expect(getImageUrl('http://c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
-      expect(getImageUrl('https://c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
+      expect(getImageUrl('//c.saavncdn.com/123.jpg'),
+          equals('https://c.saavncdn.com/123.jpg'));
+      expect(getImageUrl('http://c.saavncdn.com/123.jpg'),
+          equals('https://c.saavncdn.com/123.jpg'));
+      expect(getImageUrl('https://c.saavncdn.com/123.jpg'),
+          equals('https://c.saavncdn.com/123.jpg'));
     });
 
-    test('formatChartItems correctly maps restored gridPlaylistRenderer structure', () {
+    test(
+        'formatChartItems correctly maps restored gridPlaylistRenderer structure',
+        () {
       final input = [
         {
           'gridPlaylistRenderer': {
@@ -1649,14 +1786,17 @@ void main() {
       expect(res[0]['type'], equals('chart'));
       expect(res[0]['playlistId'], equals('PLchart123'));
       expect(res[0]['firstItemId'], equals('vid987'));
-      expect(res[0]['image'], equals('https://i.ytimg.com/vi/vid987/hqdefault.jpg'));
+      expect(res[0]['image'],
+          equals('https://i.ytimg.com/vi/vid987/hqdefault.jpg'));
     });
 
     test('formatItems handles empty or malformed inputs without throwing', () {
       final resEmpty = YouTubeServices().formatItems([]);
       expect(resEmpty, isEmpty);
 
-      final resMalformed = YouTubeServices().formatItems([{'bad': 'data'}]);
+      final resMalformed = YouTubeServices().formatItems([
+        {'bad': 'data'}
+      ]);
       expect(resMalformed, isEmpty);
     });
 
@@ -1698,12 +1838,15 @@ void main() {
       expect(res.length, equals(1));
       expect(res[0]['title'], equals('Headline Special'));
       expect(res[0]['navigationEndpoint'], equals('promo123'));
-      expect(res[0]['imageMax'], equals('https://i.ytimg.com/vi/promo123/thumb3.jpg'));
+      expect(res[0]['imageMax'],
+          equals('https://i.ytimg.com/vi/promo123/thumb3.jpg'));
     });
   });
 
   group('JioSaavn Radio Backend & Home Screen Hardening Tests', () {
-    test('buildHomeLists preserves radio section even when server radio list is empty', () async {
+    test(
+        'buildHomeLists preserves radio section even when server radio list is empty',
+        () async {
       final input = {
         'collections': ['radio'],
         'modules': {
@@ -1741,7 +1884,9 @@ void main() {
       expect(res[1]['title'], equals('Second Song'));
     });
 
-    test('Radio stations parsing filters metadata keys and extracts songs correctly', () {
+    test(
+        'Radio stations parsing filters metadata keys and extracts songs correctly',
+        () {
       final rawRadioResponse = {
         'stationid': 'webradio_12345',
         '0': {
@@ -1762,7 +1907,9 @@ void main() {
       };
       final songList = <Map>[];
       rawRadioResponse.forEach((key, value) {
-        if (int.tryParse(key.toString()) != null && value is Map && value['song'] is Map) {
+        if (int.tryParse(key.toString()) != null &&
+            value is Map &&
+            value['song'] is Map) {
           songList.add(value['song'] as Map);
         }
       });
@@ -1784,7 +1931,9 @@ void main() {
       };
       final songList = <Map>[];
       rawRadioResponse.forEach((key, value) {
-        if (int.tryParse(key.toString()) != null && value is Map && value['song'] is Map) {
+        if (int.tryParse(key.toString()) != null &&
+            value is Map &&
+            value['song'] is Map) {
           songList.add(value['song'] as Map);
         }
       });
@@ -1794,34 +1943,68 @@ void main() {
   });
 
   group('Playlist Imports & Deezer Provider Tests', () {
-    test('parseDeezerPlaylistId extracts ID from numeric strings and URLs', () async {
-      expect(await SearchAddPlaylist.parseDeezerPlaylistId('908622995'), equals('908622995'));
-      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://www.deezer.com/playlist/908622995'), equals('908622995'));
-      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://www.deezer.com/en/playlist/908622995?utm_source=test'), equals('908622995'));
-      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://www.deezer.com/fr/playlist/123456789/'), equals('123456789'));
-      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://invalid.com/track/123'), isNull);
+    test('parseDeezerPlaylistId extracts ID from numeric strings and URLs',
+        () async {
+      expect(await SearchAddPlaylist.parseDeezerPlaylistId('908622995'),
+          equals('908622995'));
+      expect(
+          await SearchAddPlaylist.parseDeezerPlaylistId(
+              'https://www.deezer.com/playlist/908622995'),
+          equals('908622995'));
+      expect(
+          await SearchAddPlaylist.parseDeezerPlaylistId(
+              'https://www.deezer.com/en/playlist/908622995?utm_source=test'),
+          equals('908622995'));
+      expect(
+          await SearchAddPlaylist.parseDeezerPlaylistId(
+              'https://www.deezer.com/fr/playlist/123456789/'),
+          equals('123456789'));
+      expect(
+          await SearchAddPlaylist.parseDeezerPlaylistId(
+              'https://invalid.com/track/123'),
+          isNull);
     });
 
-    test('parseJioSaavnToken parses URLs with trailing slashes and query params', () {
-      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde'), equals('abcde'));
-      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde?autoplay=true'), equals('abcde'));
-      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde/'), equals('abcde'));
-      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde/?param=1&param=2'), equals('abcde'));
+    test(
+        'parseJioSaavnToken parses URLs with trailing slashes and query params',
+        () {
+      expect(
+          SearchAddPlaylist.parseJioSaavnToken(
+              'https://www.jiosaavn.com/featured/romantic-hindi/abcde'),
+          equals('abcde'));
+      expect(
+          SearchAddPlaylist.parseJioSaavnToken(
+              'https://www.jiosaavn.com/featured/romantic-hindi/abcde?autoplay=true'),
+          equals('abcde'));
+      expect(
+          SearchAddPlaylist.parseJioSaavnToken(
+              'https://www.jiosaavn.com/featured/romantic-hindi/abcde/'),
+          equals('abcde'));
+      expect(
+          SearchAddPlaylist.parseJioSaavnToken(
+              'https://www.jiosaavn.com/featured/romantic-hindi/abcde/?param=1&param=2'),
+          equals('abcde'));
       expect(SearchAddPlaylist.parseJioSaavnToken('abcde'), equals('abcde'));
     });
 
     test('YouTube playlist link parser extracts playlistId across domains', () {
-      const standardYt = 'https://www.youtube.com/playlist?list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1';
-      const musicYt = 'https://music.youtube.com/playlist?list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1';
-      const withExtra = 'https://www.youtube.com/watch?v=vid123&list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1&index=2';
+      const standardYt =
+          'https://www.youtube.com/playlist?list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1';
+      const musicYt =
+          'https://music.youtube.com/playlist?list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1';
+      const withExtra =
+          'https://www.youtube.com/watch?v=vid123&list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1&index=2';
 
       final matchStandard = RegExp(r'[?&]list=([^#&]+)').firstMatch(standardYt);
       final matchMusic = RegExp(r'[?&]list=([^#&]+)').firstMatch(musicYt);
       final matchExtra = RegExp(r'[?&]list=([^#&]+)').firstMatch(withExtra);
 
-      expect(matchStandard?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
-      expect(matchMusic?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
-      expect(matchExtra?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+      expect(matchStandard?.group(1),
+          equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+      expect(
+          matchMusic?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+      expect(
+          matchExtra?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
     });
 
     test('Deezer track data structure normalizes properly', () {
@@ -1872,7 +2055,8 @@ void main() {
       final available = UpdateCheckResult(
         status: UpdateCheckStatus.updateAvailable,
         latestVersion: '1.15.9',
-        releaseUrl: 'https://github.com/thevibingteen/BlackHole/releases/tag/v1.15.9',
+        releaseUrl:
+            'https://github.com/thevibingteen/BlackHole/releases/tag/v1.15.9',
       );
       expect(available.status, equals(UpdateCheckStatus.updateAvailable));
       expect(available.latestVersion, equals('1.15.9'));
@@ -1889,6 +2073,205 @@ void main() {
       );
       expect(failed.status, equals(UpdateCheckStatus.failed));
       expect(failed.message, equals('Network timeout'));
+    });
+  });
+
+  group('AppLinks & External Destinations Tests', () {
+    test(
+        'verifies exact user-provided URLs without trailing whitespace or NBSP',
+        () {
+      expect(AppLinks.buyMeACoffeeUrl,
+          equals('https://buymeacoffee.com/thevibingteen'));
+      expect(AppLinks.paypalDonationUrl,
+          equals('https://www.paypal.com/ncp/payment/859SMGK59Z48L'));
+      expect(AppLinks.contactEmail, equals('thevibingteen@gmail.com'));
+      expect(
+          AppLinks.contactEmailUrl, equals('mailto:thevibingteen@gmail.com'));
+      expect(AppLinks.instagramUrl,
+          equals('https://www.instagram.com/thevibingteen'));
+      expect(
+          AppLinks.telegramGroupUrl, equals('https://t.me/+_9wHWiHi1MdmMGM1'));
+      expect(
+          AppLinks.telegramChannelUrl, equals('https://t.me/blackholerevived'));
+      expect(AppLinks.githubRepoUrl,
+          equals('https://github.com/thevibingteen/BlackHole'));
+
+      // Check no leading/trailing whitespace or NBSP (\u00A0)
+      for (final url in [
+        AppLinks.buyMeACoffeeUrl,
+        AppLinks.paypalDonationUrl,
+        AppLinks.contactEmail,
+        AppLinks.contactEmailUrl,
+        AppLinks.instagramUrl,
+        AppLinks.telegramGroupUrl,
+        AppLinks.telegramChannelUrl,
+        AppLinks.githubRepoUrl,
+      ]) {
+        expect(url, equals(url.trim()));
+        expect(url.contains('\u00A0'), isFalse);
+        expect(url.contains(' '), isFalse);
+      }
+    });
+
+    test('telegram channel and group URLs are distinct destinations', () {
+      expect(AppLinks.telegramGroupUrl,
+          isNot(equals(AppLinks.telegramChannelUrl)));
+      expect(AppLinks.telegramGroupUrl, contains('+_9wHWiHi1MdmMGM1'));
+      expect(AppLinks.telegramChannelUrl, contains('blackholerevived'));
+    });
+
+    testWidgets(
+        'AppLinks.open invokes launcher and debounces duplicate rapid taps',
+        (tester) async {
+      AppLinks.resetForTesting();
+      final launchedUris = <Uri>[];
+      AppLinks.launchUrlOverride =
+          (Uri uri, {LaunchMode mode = LaunchMode.externalApplication}) async {
+        launchedUris.add(uri);
+        return true;
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  await AppLinks.open(context, AppLinks.paypalDonationUrl);
+                },
+                child: const Text('Donate'),
+              );
+            },
+          ),
+        ),
+      );
+
+      // First tap should succeed and launch
+      await tester.tap(find.text('Donate'));
+      await tester.pump();
+      expect(launchedUris.length, equals(1));
+      expect(launchedUris.first.toString(),
+          equals('https://www.paypal.com/ncp/payment/859SMGK59Z48L'));
+
+      // Immediate second tap should be debounced
+      await tester.tap(find.text('Donate'));
+      await tester.pump();
+      expect(launchedUris.length, equals(1)); // debounced!
+
+      AppLinks.resetForTesting();
+    });
+
+    testWidgets(
+        'AppLinks.open handles launcher failure gracefully without crashing',
+        (tester) async {
+      AppLinks.resetForTesting();
+      AppLinks.launchUrlOverride =
+          (Uri uri, {LaunchMode mode = LaunchMode.externalApplication}) async {
+        return false; // simulate failure to open
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  final result =
+                      await AppLinks.open(context, AppLinks.buyMeACoffeeUrl);
+                  expect(result, isFalse);
+                },
+                child: const Text('Coffee'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Coffee'));
+      await tester.pumpAndSettle();
+      AppLinks.resetForTesting();
+    });
+
+    testWidgets('AppLinks.open handles exceptions without throwing',
+        (tester) async {
+      AppLinks.resetForTesting();
+      AppLinks.launchUrlOverride =
+          (Uri uri, {LaunchMode mode = LaunchMode.externalApplication}) async {
+        throw Exception('Simulated platform launch exception');
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  final result =
+                      await AppLinks.open(context, AppLinks.instagramUrl);
+                  expect(result, isFalse);
+                },
+                child: const Text('Insta'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Insta'));
+      await tester.pumpAndSettle();
+      AppLinks.resetForTesting();
+    });
+
+    testWidgets('AppLinks.openEmail launches mailto URI', (tester) async {
+      AppLinks.resetForTesting();
+      Uri? emailUri;
+      AppLinks.launchUrlOverride =
+          (Uri uri, {LaunchMode mode = LaunchMode.externalApplication}) async {
+        emailUri = uri;
+        return true;
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  await AppLinks.openEmail(context);
+                },
+                child: const Text('Email'),
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Email'));
+      await tester.pump();
+      expect(emailUri, isNotNull);
+      expect(emailUri.toString(), equals('mailto:thevibingteen@gmail.com'));
+      AppLinks.resetForTesting();
+    });
+  });
+
+  group('Application Branding & Manifest Invariants Tests', () {
+    test(
+        'AndroidManifest.xml contains exact label "Black Hole" and preserves package identity',
+        () {
+      final manifestFile = File('android/app/src/main/AndroidManifest.xml');
+      expect(manifestFile.existsSync(), isTrue);
+      final manifestContent = manifestFile.readAsStringSync();
+      expect(manifestContent.contains('android:label="Black Hole"'), isTrue);
+      expect(
+          manifestContent.contains('package="com.shadow.blackhole"'), isTrue);
+    });
+
+    test('CI workflow verifies android:label="Black Hole"', () {
+      final ciFile = File('.github/workflows/ui-reference-build.yml');
+      expect(ciFile.existsSync(), isTrue);
+      final ciContent = ciFile.readAsStringSync();
+      expect(
+          ciContent.contains('grep -n \'android:label="Black Hole"\''), isTrue);
     });
   });
 }

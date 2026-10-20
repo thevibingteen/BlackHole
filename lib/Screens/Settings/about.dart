@@ -1,6 +1,7 @@
 import 'package:blackhole/CustomWidgets/copy_clipboard.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
+import 'package:blackhole/Helpers/app_links.dart';
 import 'package:blackhole/Helpers/github.dart';
 import 'package:blackhole/Helpers/update.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -189,37 +190,32 @@ class _AboutPageState extends State<AboutPage> {
                         ),
                         dense: true,
                         onTap: () {
-                          ShowSnackBar().showSnackBar(
+                          AppLinks.open(
                             context,
-                            'Donation options coming soon',
+                            AppLinks.buyMeACoffeeUrl,
                           );
                         },
                       ),
                       ListTile(
-                        title: Text(
-                          AppLocalizations.of(
-                            context,
-                          )!
-                              .donateGpay,
+                        title: const Text(
+                          'Donate with PayPal',
                         ),
-                        subtitle: Text(
-                          AppLocalizations.of(
-                            context,
-                          )!
-                              .donateGpaySub,
+                        subtitle: const Text(
+                          'Every small amount makes me smile :)\nTap to donate or long press to copy the PayPal URL.',
                         ),
                         dense: true,
                         isThreeLine: true,
                         onTap: () {
-                          ShowSnackBar().showSnackBar(
+                          AppLinks.open(
                             context,
-                            'Donation options coming soon',
+                            AppLinks.paypalDonationUrl,
                           );
                         },
                         onLongPress: () {
-                          ShowSnackBar().showSnackBar(
-                            context,
-                            'Donation options coming soon',
+                          copyToClipboard(
+                            context: context,
+                            text: AppLinks.paypalDonationUrl,
+                            displayText: 'PayPal donation link copied',
                           );
                         },
                         trailing: TextButton(
@@ -230,9 +226,10 @@ class _AboutPageState extends State<AboutPage> {
                                     : Colors.grey[700],
                           ),
                           onPressed: () {
-                            ShowSnackBar().showSnackBar(
-                              context,
-                              'Donation options coming soon',
+                            copyToClipboard(
+                              context: context,
+                              text: AppLinks.paypalDonationUrl,
+                              displayText: 'PayPal donation link copied',
                             );
                           },
                           child: Text(
@@ -285,13 +282,7 @@ class _AboutPageState extends State<AboutPage> {
                                                 .gmail,
                                             onPressed: () {
                                               Navigator.pop(context);
-                                              launchUrl(
-                                                Uri.parse(
-                                                  'https://mail.google.com/mail/?extsrc=mailto&url=mailto%3A%3Fto%3Dblackholeyoucantescape%40gmail.com%26subject%3DRegarding%2520Mobile%2520App',
-                                                ),
-                                                mode: LaunchMode
-                                                    .externalApplication,
-                                              );
+                                              AppLinks.openEmail(context);
                                             },
                                           ),
                                           Text(
@@ -316,12 +307,9 @@ class _AboutPageState extends State<AboutPage> {
                                                 .tg,
                                             onPressed: () {
                                               Navigator.pop(context);
-                                              launchUrl(
-                                                Uri.parse(
-                                                  'https://t.me/joinchat/fHDC1AWnOhw0ZmI9',
-                                                ),
-                                                mode: LaunchMode
-                                                    .externalApplication,
+                                              AppLinks.open(
+                                                context,
+                                                AppLinks.telegramGroupUrl,
                                               );
                                             },
                                           ),
@@ -347,12 +335,9 @@ class _AboutPageState extends State<AboutPage> {
                                                 .insta,
                                             onPressed: () {
                                               Navigator.pop(context);
-                                              launchUrl(
-                                                Uri.parse(
-                                                  'https://instagram.com/sangwan5688',
-                                                ),
-                                                mode: LaunchMode
-                                                    .externalApplication,
+                                              AppLinks.open(
+                                                context,
+                                                AppLinks.instagramUrl,
                                               );
                                             },
                                           ),
@@ -410,12 +395,9 @@ class _AboutPageState extends State<AboutPage> {
                                                 .tgGp,
                                             onPressed: () {
                                               Navigator.pop(context);
-                                              launchUrl(
-                                                Uri.parse(
-                                                  'https://t.me/joinchat/fHDC1AWnOhw0ZmI9',
-                                                ),
-                                                mode: LaunchMode
-                                                    .externalApplication,
+                                              AppLinks.open(
+                                                context,
+                                                AppLinks.telegramGroupUrl,
                                               );
                                             },
                                           ),
@@ -441,12 +423,9 @@ class _AboutPageState extends State<AboutPage> {
                                                 .tgCh,
                                             onPressed: () {
                                               Navigator.pop(context);
-                                              launchUrl(
-                                                Uri.parse(
-                                                  'https://t.me/blackhole_official',
-                                                ),
-                                                mode: LaunchMode
-                                                    .externalApplication,
+                                              AppLinks.open(
+                                                context,
+                                                AppLinks.telegramChannelUrl,
                                               );
                                             },
                                           ),

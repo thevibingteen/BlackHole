@@ -17,6 +17,7 @@
  * Copyright (c) 2021-2022, Ankit Sangwan
  */
 
+import 'package:blackhole/Helpers/app_links.dart';
 import 'package:blackhole/CustomWidgets/copy_clipboard.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
@@ -110,7 +111,7 @@ class _AboutScreenState extends State<AboutScreen> {
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        AppLocalizations.of(context)!.appTitle,
+                        'Black Hole',
                         style: const TextStyle(
                           fontSize: 35,
                           fontWeight: FontWeight.bold,
@@ -133,11 +134,9 @@ class _AboutScreenState extends State<AboutScreen> {
                         ),
                         TextButton(
                           onPressed: () {
-                            launchUrl(
-                              Uri.parse(
-                                'https://github.com/thevibingteen/BlackHole',
-                              ),
-                              mode: LaunchMode.externalApplication,
+                            AppLinks.open(
+                              context,
+                              AppLinks.githubRepoUrl,
                             );
                           },
                           child: SizedBox(
@@ -171,9 +170,9 @@ class _AboutScreenState extends State<AboutScreen> {
                           foregroundColor: Colors.transparent,
                         ),
                         onPressed: () {
-                          ShowSnackBar().showSnackBar(
+                          AppLinks.open(
                             context,
-                            'Donation options coming soon',
+                            AppLinks.buyMeACoffeeUrl,
                           );
                         },
                         child: SizedBox(
@@ -188,31 +187,39 @@ class _AboutScreenState extends State<AboutScreen> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 12),
                       ),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.transparent,
-                        ),
-                        onPressed: () {
-                          ShowSnackBar().showSnackBar(
-                            context,
-                            'Donation options coming soon',
-                          );
-                        },
-                        onLongPress: () {
-                          ShowSnackBar().showSnackBar(
-                            context,
-                            'Donation options coming soon',
-                          );
-                        },
-                        child: SizedBox(
-                          width: MediaQuery.of(context).size.width / 2,
-                          child: Image(
-                            image: AssetImage(
-                              Theme.of(context).brightness == Brightness.dark
-                                  ? 'assets/gpay-white.png'
-                                  : 'assets/gpay-white.png',
+                      SizedBox(
+                        width: MediaQuery.of(context).size.width / 2,
+                        height: 40,
+                        child: Card(
+                          color: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6.0),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6.0),
+                            onTap: () {
+                              AppLinks.open(
+                                context,
+                                AppLinks.paypalDonationUrl,
+                              );
+                            },
+                            onLongPress: () {
+                              copyToClipboard(
+                                context: context,
+                                text: AppLinks.paypalDonationUrl,
+                                displayText: 'PayPal donation link copied',
+                              );
+                            },
+                            child: const Center(
+                              child: Text(
+                                'Donate with PayPal',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                         ),

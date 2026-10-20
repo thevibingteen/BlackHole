@@ -55,8 +55,8 @@ jobs:
           sed -i 's/applicationId "com.shadow.blackhole"/applicationId "com.shadow.blackhole.ui_reference"/' android/app/build.gradle
           echo "Verified application ID change:"
           grep -n 'applicationId "com.shadow.blackhole.ui_reference"' android/app/build.gradle
-          echo "Verified launcher label remains BlackHole:"
-          grep -n 'android:label="BlackHole"' android/app/src/main/AndroidManifest.xml
+          echo "Verified launcher label is Black Hole:"
+          grep -n 'android:label="Black Hole"' android/app/src/main/AndroidManifest.xml
 
       - name: Generate disposable test keystore and key.properties
         run: |
