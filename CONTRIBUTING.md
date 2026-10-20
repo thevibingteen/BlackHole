@@ -1,59 +1,104 @@
-# Contributing to this repository
+# Contributing to BlackHole
 
-## Getting started
+Thank you for your interest in contributing to BlackHole! This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/BlackHole)) is a community-maintained version of the BlackHole open-source Flutter music player.
 
-Before you begin:
-- This project is powered by Flutter. Make sure you have the latest version of Flutter.
-- Have you read the [code of conduct](CODE_OF_CONDUCT.md)?
-- Make sure to check if an [issue exists](https://github.com/Sangwan5688/BlackHole/issues) already & see if the issue is assigned to anyone or not.
-- If no one is assigned you can start working on the issue.
-- Make sure to leave a comment stating that you are working on the issue.
+We welcome bug reports, feature suggestions, documentation improvements, and pull requests.
 
-### Issue already assigned to someone? Ask before starting
+---
 
-If the issue is already assigned to someone, leave a comment asking how you can contribute. Please do not start working on your own without confirmation.
+## Code of Conduct
 
-### Don't see your issue? Open one
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before participating in this project. All contributors and participants are expected to adhere to its standards to maintain a welcoming, respectful, and harassment-free community.
 
-If you spot something new, open an issue using a [template](https://github.com/Sangwan5688/BlackHole/issues/new/choose). We'll use the issue to have a conversation about the problem you want to fix.
+---
 
-### Ready to make a change? Fork the repo
+## Getting Started
 
-Fork using GitHub Desktop:
+### 1. Check Existing Issues
+- Before opening a new issue or writing code, check the [issue tracker](https://github.com/thevibingteen/BlackHole/issues) to see if a similar bug or feature request has already been reported.
+- If an open issue exists and someone is already actively working on it, please leave a comment to coordinate efforts before starting work.
 
-- [Getting started with GitHub Desktop](https://docs.github.com/en/desktop/installing-and-configuring-github-desktop/getting-started-with-github-desktop) will guide you through setting up Desktop.
-- Once Desktop is set up, you can use it to [fork the repo](https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/cloning-and-forking-repositories-from-github-desktop)!
+### 2. Reporting Bugs & Feature Requests
+- **Bugs**: If you find a new bug, please open an issue using the [Bug Report template](https://github.com/thevibingteen/BlackHole/issues/new/choose). Provide clear steps to reproduce the behavior, device details (OS version, device model), app version, and relevant logs if available.
+- **Feature Requests**: Suggest ideas or improvements using the [Feature Request template](https://github.com/thevibingteen/BlackHole/issues/new/choose). Clearly describe the problem, the proposed solution, and any alternatives considered.
 
-Fork using the command line:
+---
 
-- [Fork the repo](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo#fork-an-example-repository) so that you can make your changes without affecting the original project until you're ready to merge them.
+## Development Environment & Toolchain
 
-Fork with [GitHub Codespaces](https://github.com/features/codespaces):
+To ensure consistency with the repository's continuous integration (CI) pipeline, use the following supported environment:
 
-- [Fork, edit, and preview](https://docs.github.com/en/free-pro-team@latest/github/developing-online-with-codespaces/creating-a-codespace) using [GitHub Codespaces](https://github.com/features/codespaces) without having to install and run the project locally.
+- **Flutter SDK**: `>=3.0.0` (CI pipeline uses Flutter `3.10.6` stable)
+- **Dart SDK**: Compatible with `environment: sdk: ">=2.18.0 <4.0.0"` in [`pubspec.yaml`](pubspec.yaml)
+- **Java Development Kit (JDK)**: Java 11 (Temurin Hotspot JDK 11 is used in CI)
+- **Android SDK**: API level 33+ platform tools
 
-### Make your update:
-Make your changes to the file(s) you'd like to update.
+---
 
-### Open a pull request
-When you're done making changes and you'd like to propose them for review, open your PR (pull request). You can use the GitHub user interface for some small changes, like fixing a typo or updating a readme. You can also fork the repo and then clone it locally, to view changes and run your tests on your machine.
+## Development Workflow
 
-### Submit your PR & get it reviewed
-- Once you submit your PR, others from the Docs community will review it with you. The first thing you're going to want to do is a [self review](#self-review).
-- After that, we may have questions, check back on your PR to keep up with the conversation.
-- We may ask for changes to be made before a PR can be merged. You can make any other changes in your fork, then commit them to your branch.
+### 1. Fork and Clone
+Fork the repository on GitHub, then clone your fork locally:
 
-### Your PR is merged!
-Congratulations! The whole community thanks you. :sparkles:
+```bash
+git clone https://github.com/<your-username>/BlackHole.git
+cd BlackHole
+```
 
-Once your PR is merged, you will be proudly listed as a contributor in the [contributor chart](https://github.com/Sangwan5688/BlackHole/graphs/contributors).
+### 2. Working Branch
+The primary development branch for this build series is:
+`ui-reference-build/blackhole-main`
 
-### Self review
-You should always review your own PR first.
+Create your topic branch based on `ui-reference-build/blackhole-main`:
 
-For content changes, make sure that you:
-- [ ] Confirm the changes doesn't break anything else.
-- [ ] Compare your pull request's source changes to staging to confirm that the output matches the source and that everything is rendering as expected. This helps spot issues like typos, content that doesn't follow the style guide, or content that isn't rendering due to versioning problems.
-- [ ] Review the content for technical accuracy.
-- [ ] Copy-edit the changes for grammar or spelling mistakes.
+```bash
+git checkout -b fix/your-bug-description ui-reference-build/blackhole-main
+```
 
+### 3. Install Dependencies
+Fetch the project packages:
+
+```bash
+flutter pub get
+```
+
+### 4. Running the App
+Run on a connected Android device, emulator, or desktop target:
+
+```bash
+flutter run
+```
+
+### 5. Running Tests & Code Quality Checks
+Before submitting your changes, run the test suite and verify code formatting:
+
+```bash
+# Format code
+dart format --output=none --set-exit-if-changed .
+
+# Run test suites
+flutter test test/backend_test.dart test/widget_test.dart
+```
+
+---
+
+## Pull Request Guidelines
+
+1. **Focused Scope**: Keep changes focused on the problem being solved. Avoid unrelated refactors, cosmetic re-formatting of untouched files, or dependency churn.
+2. **Preserve User Changes**: When working in a shared workspace or branch, be mindful of existing changes and do not discard user work.
+3. **Target Branch**: Submit pull requests against the `ui-reference-build/blackhole-main` branch of [thevibingteen/BlackHole](https://github.com/thevibingteen/BlackHole).
+4. **Self-Review Checklist**:
+   - [ ] Code compiles and passes `flutter test`.
+   - [ ] Dart code adheres to `dart format`.
+   - [ ] Documentation and comments are updated if behavior changed.
+   - [ ] No secrets, keys, or unintended build artifacts are committed.
+   - [ ] License and copyright headers on inherited files remain preserved.
+
+---
+
+## References
+
+- [Project README](README.md)
+- [GNU General Public License v3.0](LICENSE)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [GitHub Issues](https://github.com/thevibingteen/BlackHole/issues)
