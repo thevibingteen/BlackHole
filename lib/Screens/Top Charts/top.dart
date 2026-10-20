@@ -53,8 +53,6 @@ class TopCharts extends StatefulWidget {
 
 class _TopChartsState extends State<TopCharts>
     with AutomaticKeepAliveClientMixin<TopCharts> {
-  final ValueNotifier<bool> localFetchFinished = ValueNotifier<bool>(false);
-
   @override
   bool get wantKeepAlive => true;
 
@@ -69,67 +67,90 @@ class _TopChartsState extends State<TopCharts>
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: IconButton(
-                icon: const Icon(Icons.my_location_rounded),
-                tooltip: 'Select Chart',
-                onPressed: () async {
-                  final String current = Hive.box('settings')
-                      .get('region', defaultValue: 'India Superhits Top 50')
-                      .toString();
-                  await showDialog(
-                    context: context,
-                    builder: (BuildContext ctx) {
-                      return SimpleDialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15.0),
-                        ),
-                        title: const Text('Select JioSaavn Chart'),
-                        children: jioSaavnCharts.keys.map((String name) {
-                          final bool isSelected = current == name ||
-                              (current == 'India' &&
-                                  name == 'India Superhits Top 50');
-                          return SimpleDialogOption(
-                            onPressed: () {
-                              final String id = jioSaavnCharts[name]!;
-                              Hive.box('settings').put('saavn_chart_id', id);
-                              Hive.box('settings').put('region', name);
-                              Navigator.pop(ctx);
-                              localFetchFinished.value = false;
-                              scrapData(name);
-                              setState(() {});
-                            },
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isSelected
-                                      ? Icons.radio_button_checked_rounded
-                                      : Icons.radio_button_off_rounded,
-                                  color: isSelected
-                                      ? Theme.of(context).colorScheme.secondary
-                                      : null,
+            Builder(
+              builder: (BuildContext tabContext) {
+                final TabController? tabController =
+                    DefaultTabController.maybeOf(tabContext);
+                if (tabController == null) {
+                  return const SizedBox.shrink();
+                }
+                return AnimatedBuilder(
+                  animation: tabController,
+                  builder: (BuildContext ctx, Widget? child) {
+                    if (tabController.index != 0) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.my_location_rounded),
+                        tooltip: 'Select Chart',
+                        onPressed: () async {
+                          final String current = Hive.box('settings')
+                              .get(
+                                'region',
+                                defaultValue: 'India Superhits Top 50',
+                              )
+                              .toString();
+                          await showDialog(
+                            context: context,
+                            builder: (BuildContext dialogCtx) {
+                              return SimpleDialog(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15.0),
                                 ),
-                                const SizedBox(width: 12.0),
-                                Expanded(
-                                  child: Text(
-                                    name,
-                                    style: TextStyle(
-                                      fontWeight: isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
+                                title: const Text('Select JioSaavn Chart'),
+                                children: jioSaavnCharts.keys.map((String name) {
+                                  final bool isSelected = current == name ||
+                                      (current == 'India' &&
+                                          name == 'India Superhits Top 50');
+                                  return SimpleDialogOption(
+                                    onPressed: () {
+                                      final String id = jioSaavnCharts[name]!;
+                                      Hive.box('settings')
+                                          .put('saavn_chart_id', id);
+                                      Hive.box('settings').put('region', name);
+                                      Navigator.pop(dialogCtx);
+                                      localFetchFinished.value = false;
+                                      scrapData(name);
+                                      setState(() {});
+                                    },
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected
+                                              ? Icons.radio_button_checked_rounded
+                                              : Icons.radio_button_off_rounded,
+                                          color: isSelected
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .secondary
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 12.0),
+                                        Expanded(
+                                          child: Text(
+                                            name,
+                                            style: TextStyle(
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                                  );
+                                }).toList(),
+                              );
+                            },
                           );
-                        }).toList(),
-                      );
-                    },
-                  );
-                },
-              ),
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ],
           bottom: TabBar(

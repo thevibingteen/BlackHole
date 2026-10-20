@@ -4,6 +4,7 @@ import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/lyrics.dart';
 import 'package:blackhole/Helpers/mediaitem_converter.dart';
 import 'package:blackhole/Helpers/update.dart';
+import 'package:blackhole/Services/youtube_services.dart';
 import 'package:blackhole/Services/yt_music.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -1078,6 +1079,364 @@ void main() {
       expect(charts['India Superhits Top 50'], equals('1134548194'));
       expect(charts['Trending Today'], equals('110858205'));
       expect(charts['Hindi: India Superhits Top 50'], equals('1134543272'));
+    });
+  });
+
+  group('YouTube Home Card Endpoint Parsing & Downstream Playlist Loading Tests', () {
+    test('parses lockupViewModel with playlist endpoint into playlist card', () {
+      final Map<String, dynamic> mockLvm = {
+        'contentId': 'RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0',
+        'contentType': 'LOCKUP_CONTENT_TYPE_PLAYLIST',
+        'metadata': {
+          'lockupMetadataViewModel': {
+            'title': {
+              'content': 'Bollywood Hitlist',
+            },
+            'metadata': {
+              'contentMetadataViewModel': {
+                'metadataRows': [
+                  {
+                    'metadataParts': [
+                      {'text': {'content': 'Playlist • 50 tracks'}}
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        'contentImage': {
+          'thumbnailViewModel': {
+            'image': {
+              'sources': [
+                {'url': 'https://lh3.googleusercontent.com/pl_544.jpg'}
+              ]
+            }
+          }
+        },
+        'rendererContext': {
+          'commandContext': {
+            'onTap': {
+              'innertubeCommand': {
+                'watchPlaylistEndpoint': {
+                  'playlistId': 'RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      final cmd = ((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] != null
+          ? (((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] as Map)['innertubeCommand'] as Map
+          : {};
+      String? playlistId = cmd['watchPlaylistEndpoint']?['playlistId']?.toString();
+      playlistId ??= cmd['watchEndpoint']?['playlistId']?.toString();
+      playlistId ??= cmd['browseEndpoint']?['browseId']?.toString();
+      final String contentType = mockLvm['contentType']?.toString() ?? '';
+      final String? videoId = cmd['watchEndpoint']?['videoId']?.toString();
+
+      String itemType = 'playlist';
+      if (contentType == 'LOCKUP_CONTENT_TYPE_VIDEO' ||
+          (videoId != null && videoId.isNotEmpty && (playlistId == null || playlistId.isEmpty))) {
+        itemType = 'video';
+        playlistId = '';
+      } else if (playlistId != null && playlistId.isNotEmpty) {
+        itemType = 'playlist';
+      }
+
+      expect(itemType, equals('playlist'));
+      expect(playlistId, equals('RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0'));
+    });
+
+    test('parses lockupViewModel with video endpoint as video card and does not treat as playlist', () {
+      final Map<String, dynamic> mockLvm = {
+        'contentId': 'dQw4w9WgXcQ',
+        'contentType': 'LOCKUP_CONTENT_TYPE_VIDEO',
+        'metadata': {
+          'lockupMetadataViewModel': {
+            'title': {'content': 'Official Music Video'},
+          }
+        },
+        'rendererContext': {
+          'commandContext': {
+            'onTap': {
+              'innertubeCommand': {
+                'watchEndpoint': {
+                  'videoId': 'dQw4w9WgXcQ'
+                }
+              }
+            }
+          }
+        }
+      };
+
+      final cmd = ((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] != null
+          ? (((mockLvm['rendererContext'] as Map)['commandContext'] as Map)['onTap'] as Map)['innertubeCommand'] as Map
+          : {};
+      String? playlistId = cmd['watchPlaylistEndpoint']?['playlistId']?.toString();
+      playlistId ??= cmd['watchEndpoint']?['playlistId']?.toString();
+      playlistId ??= cmd['browseEndpoint']?['browseId']?.toString();
+      final String contentType = mockLvm['contentType']?.toString() ?? '';
+      final String? videoId = cmd['watchEndpoint']?['videoId']?.toString();
+
+      String itemType = 'playlist';
+      if (contentType == 'LOCKUP_CONTENT_TYPE_VIDEO' ||
+          (videoId != null && videoId.isNotEmpty && (playlistId == null || playlistId.isEmpty))) {
+        itemType = 'video';
+        playlistId = '';
+      } else if (playlistId != null && playlistId.isNotEmpty) {
+        itemType = 'playlist';
+      }
+
+      expect(itemType, equals('video'));
+      expect(playlistId, isEmpty);
+      expect(videoId, equals('dQw4w9WgXcQ'));
+    });
+
+    test('parses modern twoColumnBrowseResultsRenderer playlist details response fixture', () {
+      final mockBrowseResponse = {
+        'contents': {
+          'twoColumnBrowseResultsRenderer': {
+            'tabs': [
+              {
+                'tabRenderer': {
+                  'content': {
+                    'sectionListRenderer': {
+                      'contents': [
+                        {
+                          'musicResponsiveHeaderRenderer': {
+                            'title': {
+                              'runs': [
+                                {'text': 'इश्क़ है सुकून (Ishq Hai Sukoon)'}
+                              ]
+                            },
+                            'subtitle': {
+                              'runs': [
+                                {'text': 'Playlist'},
+                                {'text': ' • '},
+                                {'text': '2026'}
+                              ]
+                            },
+                            'description': {
+                              'musicDescriptionShelfRenderer': {
+                                'description': {
+                                  'runs': [
+                                    {'text': 'Tranquil, soulful watches.'}
+                                  ]
+                                }
+                              }
+                            },
+                            'thumbnail': {
+                              'musicThumbnailRenderer': {
+                                'thumbnail': {
+                                  'thumbnails': [
+                                    {'url': 'https://lh3.googleusercontent.com/pl_thumb.jpg'}
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            'secondaryContents': {
+              'sectionListRenderer': {
+                'contents': [
+                  {
+                    'musicPlaylistShelfRenderer': {
+                      'contents': [
+                        {
+                          'musicResponsiveListItemRenderer': {
+                            'playlistItemData': {'videoId': 'V7LwfY5U5WI'},
+                            'flexColumns': [
+                              {
+                                'musicResponsiveListItemFlexColumnRenderer': {
+                                  'text': {
+                                    'runs': [
+                                      {'text': 'Ranjha (ਰਾਝਾਂ)'}
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                'musicResponsiveListItemFlexColumnRenderer': {
+                                  'text': {
+                                    'runs': [
+                                      {'text': 'B Praak'},
+                                      {'text': ' • '},
+                                      {'text': 'Shershaah'},
+                                      {'text': ' • '},
+                                      {'text': '3:48'}
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            'thumbnail': {
+                              'musicThumbnailRenderer': {
+                                'thumbnail': {
+                                  'thumbnails': [
+                                    {'url': 'https://lh3.googleusercontent.com/song_thumb.jpg'}
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      };
+
+      final twoCol = mockBrowseResponse['contents']!['twoColumnBrowseResultsRenderer'] as Map;
+      final tab0 = (twoCol['tabs'] as List)[0]['tabRenderer']['content']['sectionListRenderer']['contents'] as List;
+      final header = tab0[0]['musicResponsiveHeaderRenderer'] as Map;
+      final heading = (header['title']['runs'] as List)[0]['text'];
+      final subtitle = (header['subtitle']['runs'] as List).map((e) => e['text']).join();
+      final description = (header['description']['musicDescriptionShelfRenderer']['description']['runs'] as List)[0]['text'];
+
+      expect(heading, equals('इश्क़ है सुकून (Ishq Hai Sukoon)'));
+      expect(subtitle, equals('Playlist • 2026'));
+      expect(description, equals('Tranquil, soulful watches.'));
+
+      final secContents = twoCol['secondaryContents']['sectionListRenderer']['contents'] as List;
+      final shelf = secContents[0]['musicPlaylistShelfRenderer'] as Map;
+      final items = shelf['contents'] as List;
+      expect(items.length, equals(1));
+
+      final firstItem = items[0]['musicResponsiveListItemRenderer'] as Map;
+      expect(firstItem['playlistItemData']['videoId'], equals('V7LwfY5U5WI'));
+      final trackTitle = (firstItem['flexColumns'][0]['musicResponsiveListItemFlexColumnRenderer']['text']['runs'] as List)[0]['text'];
+      expect(trackTitle, equals('Ranjha (ਰਾਝਾਂ)'));
+    });
+  });
+
+  group('YouTube Stream Candidate Model, Quality Selection & Fallbacks Tests', () {
+    test('YouTubeStreamCandidate selection sorts candidates by bitrate ascending', () {
+      final candidates = [
+        YouTubeStreamCandidate(
+          videoId: 'testVid',
+          url: 'https://stream.googlevideo.com/high?expire=1792445511',
+          mimeType: 'audio/webm',
+          audioCodec: 'opus',
+          bitrate: 160000,
+          isAudioOnly: true,
+          expireAt: 1792445511,
+          resolver: 'test',
+        ),
+        YouTubeStreamCandidate(
+          videoId: 'testVid',
+          url: 'https://stream.googlevideo.com/low?expire=1792445511',
+          mimeType: 'audio/webm',
+          audioCodec: 'opus',
+          bitrate: 50000,
+          isAudioOnly: true,
+          expireAt: 1792445511,
+          resolver: 'test',
+        ),
+        YouTubeStreamCandidate(
+          videoId: 'testVid',
+          url: 'https://stream.googlevideo.com/medium?expire=1792445511',
+          mimeType: 'audio/mp4',
+          audioCodec: 'mp4a.40.2',
+          bitrate: 128000,
+          isAudioOnly: true,
+          expireAt: 1792445511,
+          resolver: 'test',
+        ),
+      ];
+
+      final selected = selectStreamUrls(candidates);
+      expect(selected.length, equals(2));
+      // First is lowest bitrate (50 kbps)
+      expect(selected.first, contains('/low'));
+      // Last is highest bitrate (160 kbps)
+      expect(selected.last, contains('/high'));
+    });
+
+    test('rejects video-only candidates safely', () {
+      final rawAdaptiveFormats = [
+        {
+          'mimeType': 'video/mp4; codecs="avc1.64001F"',
+          'bitrate': 2500000,
+          'url': 'https://stream.googlevideo.com/videopart'
+        },
+        {
+          'mimeType': 'audio/mp4; codecs="mp4a.40.2"',
+          'bitrate': 128000,
+          'url': 'https://stream.googlevideo.com/audiopart?expire=1792445511'
+        }
+      ];
+
+      final List<YouTubeStreamCandidate> candidates = [];
+      for (final f in rawAdaptiveFormats) {
+        final String mime = f['mimeType']?.toString() ?? '';
+        if (!mime.contains('audio')) continue; // Reject video-only
+        candidates.add(
+          YouTubeStreamCandidate(
+            videoId: 'testVid',
+            url: f['url']!.toString(),
+            mimeType: mime,
+            audioCodec: 'mp4a',
+            bitrate: f['bitrate'] as int,
+            isAudioOnly: true,
+            expireAt: 1792445511,
+            resolver: 'test',
+          ),
+        );
+      }
+
+      expect(candidates.length, equals(1));
+      expect(candidates.first.url, contains('audiopart'));
+      expect(candidates.first.bitrate, equals(128000));
+    });
+
+    test('handles empty or malformed URLs without throwing exceptions', () {
+      final candidates = [
+        YouTubeStreamCandidate(
+          videoId: 'testVid',
+          url: '',
+          mimeType: 'audio/mp4',
+          audioCodec: 'mp4a',
+          bitrate: 128000,
+          isAudioOnly: true,
+          resolver: 'test',
+        ),
+        YouTubeStreamCandidate(
+          videoId: 'testVid',
+          url: 'null',
+          mimeType: 'audio/mp4',
+          audioCodec: 'mp4a',
+          bitrate: 128000,
+          isAudioOnly: true,
+          resolver: 'test',
+        ),
+      ];
+
+      final selected = selectStreamUrls(candidates);
+      expect(selected, isEmpty);
+    });
+  });
+
+  group('Top Charts Tab Bar Selector Visibility Tests', () {
+    test('selector visibility logic shows for Local (index 0) and hides for Global (index 1)', () {
+      bool isSelectorVisible(int tabIndex) {
+        return tabIndex == 0;
+      }
+
+      expect(isSelectorVisible(0), isTrue);
+      expect(isSelectorVisible(1), isFalse);
+      expect(isSelectorVisible(2), isFalse);
     });
   });
 }

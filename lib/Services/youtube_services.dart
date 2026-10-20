@@ -19,13 +19,56 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:html_unescape/html_unescape_small.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+
+class YouTubeStreamCandidate {
+  final String videoId;
+  final String url;
+  final String mimeType;
+  final String audioCodec;
+  final int bitrate;
+  final bool isAudioOnly;
+  final int? expireAt;
+  final String resolver;
+
+  YouTubeStreamCandidate({
+    required this.videoId,
+    required this.url,
+    required this.mimeType,
+    required this.audioCodec,
+    required this.bitrate,
+    required this.isAudioOnly,
+    this.expireAt,
+    required this.resolver,
+  });
+
+  bool get isValid =>
+      url.isNotEmpty &&
+      url != 'null' &&
+      Uri.tryParse(url)?.hasAbsolutePath == true &&
+      (url.contains('googlevideo.com') || url.contains('youtube.com'));
+}
+
+List<String> selectStreamUrls(List<YouTubeStreamCandidate> candidates) {
+  final valid = candidates.where((c) => c.isValid).toList();
+  if (valid.isEmpty) return [];
+
+  // Filter for audio-only streams first
+  final audioOnly = valid.where((c) => c.isAudioOnly).toList();
+  final usable = audioOnly.isNotEmpty ? audioOnly : valid;
+
+  // Sort by bitrate ascending (lowest is Low, highest is High)
+  usable.sort((a, b) => a.bitrate.compareTo(b.bitrate));
+
+  final String low = usable.first.url;
+  final String high = usable.last.url;
+  return [low, high];
+}
 
 class YouTubeServices {
   static const String searchAuthority = 'www.youtube.com';
@@ -281,23 +324,57 @@ class YouTubeServices {
                     ? imgSources.last['url']?.toString() ?? ''
                     : '';
 
-                // Playlist / Video ID
+                // Structured navigation endpoint parsing
+                final String contentType =
+                    lvm['contentType']?.toString() ?? '';
                 final String contentId = lvm['contentId']?.toString() ?? '';
                 final cmd = lvm['rendererContext']?['commandContext']?['onTap']
                     ?['innertubeCommand'];
-                final String playlistId =
-                    cmd?['watchPlaylistEndpoint']?['playlistId']?.toString() ??
-                        contentId;
-                final String videoId =
-                    cmd?['watchEndpoint']?['videoId']?.toString() ?? '';
+
+                String? playlistId =
+                    cmd?['watchPlaylistEndpoint']?['playlistId']?.toString();
+                playlistId ??= cmd?['watchEndpoint']?['playlistId']?.toString();
+                playlistId ??= cmd?['browseEndpoint']?['browseId']?.toString();
+
+                final String? videoId =
+                    cmd?['watchEndpoint']?['videoId']?.toString();
+
+                String itemType = 'playlist';
+                if (contentType == 'LOCKUP_CONTENT_TYPE_VIDEO' ||
+                    (videoId != null &&
+                        videoId.isNotEmpty &&
+                        (playlistId == null || playlistId.isEmpty))) {
+                  itemType = 'video';
+                  playlistId = '';
+                } else if (playlistId != null && playlistId.isNotEmpty) {
+                  itemType = 'playlist';
+                } else if (contentId.isNotEmpty) {
+                  if (contentId.startsWith('PL') ||
+                      contentId.startsWith('RD') ||
+                      contentId.startsWith('OL') ||
+                      contentId.startsWith('VL')) {
+                    itemType = 'playlist';
+                    playlistId = contentId;
+                  } else if (contentId.length == 11) {
+                    itemType = 'video';
+                    playlistId = '';
+                  } else {
+                    itemType = 'playlist';
+                    playlistId = contentId;
+                  }
+                } else {
+                  continue;
+                }
 
                 shelfItems.add({
                   'title': itemTitle,
-                  'type': playlistId.isNotEmpty ? 'playlist' : 'video',
+                  'type': itemType,
                   'description': desc,
                   'count': '',
-                  'playlistId': playlistId,
-                  'firstItemId': videoId.isNotEmpty ? videoId : contentId,
+                  'playlistId': playlistId ?? '',
+                  'firstItemId': (videoId != null && videoId.isNotEmpty)
+                      ? videoId
+                      : contentId,
                   'image': imgUrl,
                   'imageMedium': imgUrl,
                   'imageStandard': imgUrl,
@@ -884,28 +961,73 @@ class YouTubeServices {
     final List adaptiveFormats =
         streamingData['adaptiveFormats'] as List? ?? [];
 
-    final List<String> urls = [];
+    final List<YouTubeStreamCandidate> candidates = [];
 
-    // Prioritize direct audio streams from adaptiveFormats if any has direct url
+    // 1. Prioritize direct audio streams from adaptiveFormats
     for (final f in adaptiveFormats) {
-      if (f is Map &&
-          f['mimeType']?.toString().contains('audio') == true &&
-          f['url'] != null &&
-          f['url'].toString().isNotEmpty) {
-        urls.add(f['url'].toString());
+      if (f is! Map) continue;
+      final String url = f['url']?.toString() ?? '';
+      if (url.isEmpty || url == 'null') continue;
+      final String mime = f['mimeType']?.toString() ?? '';
+      if (!mime.contains('audio')) continue; // Reject video-only streams
+
+      final codecMatch = RegExp(r'codecs="([^"]+)"').firstMatch(mime);
+      final String codec = codecMatch?.group(1) ?? 'audio';
+      final int bitrate = int.tryParse(f['bitrate']?.toString() ?? '') ??
+          int.tryParse(f['averageBitrate']?.toString() ?? '') ??
+          128000;
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(url);
+      final int? exp = match != null ? int.tryParse(match.group(1)!) : null;
+
+      candidates.add(
+        YouTubeStreamCandidate(
+          videoId: videoId,
+          url: url,
+          mimeType: mime,
+          audioCodec: codec,
+          bitrate: bitrate,
+          isAudioOnly: true,
+          expireAt: exp,
+          resolver: 'innertube_adaptive',
+        ),
+      );
+    }
+
+    // 2. Also collect progressive formats (e.g. itag 18 mp4 with AAC audio)
+    if (candidates.isEmpty) {
+      for (final f in formats) {
+        if (f is! Map) continue;
+        final String url = f['url']?.toString() ?? '';
+        if (url.isEmpty || url == 'null') continue;
+        final String mime = f['mimeType']?.toString() ?? '';
+        if (!mime.contains('mp4a') &&
+            !mime.contains('aac') &&
+            !mime.contains('opus') &&
+            f['audioQuality'] == null) continue;
+
+        final codecMatch = RegExp(r'codecs="([^"]+)"').firstMatch(mime);
+        final String codec = codecMatch?.group(1) ?? 'muxed_audio';
+        final int bitrate =
+            int.tryParse(f['bitrate']?.toString() ?? '') ?? 128000;
+        final match = RegExp(r'expire=([0-9]+)').firstMatch(url);
+        final int? exp = match != null ? int.tryParse(match.group(1)!) : null;
+
+        candidates.add(
+          YouTubeStreamCandidate(
+            videoId: videoId,
+            url: url,
+            mimeType: mime,
+            audioCodec: codec,
+            bitrate: bitrate,
+            isAudioOnly: false,
+            expireAt: exp,
+            resolver: 'innertube_progressive',
+          ),
+        );
       }
     }
 
-    // Also collect progressive formats (itag 18 mp4 with AAC audio)
-    for (final f in formats) {
-      if (f is Map && f['url'] != null && f['url'].toString().isNotEmpty) {
-        urls.add(f['url'].toString());
-      }
-    }
-
-    if (urls.isEmpty) return [];
-
-    return [urls.first, urls.last];
+    return selectStreamUrls(candidates);
   }
 
   Future<Map?> formatVideoFromInnerTube({
@@ -1080,50 +1202,62 @@ class YouTubeServices {
           .timeout(const Duration(seconds: 35));
       stopwatch.stop();
 
-      final List<AudioOnlyStreamInfo> audioOnlyList =
-          manifest.audioOnly.sortByBitrate();
-      final List<MuxedStreamInfo> muxedList = manifest.muxed.sortByBitrate();
+      final List<YouTubeStreamCandidate> candidates = [];
+      for (final s in manifest.audioOnly) {
+        final String streamUrl = s.url.toString();
+        if (streamUrl.isEmpty || streamUrl == 'null') continue;
+        final match = RegExp(r'expire=([0-9]+)').firstMatch(streamUrl);
+        final int? exp = match != null ? int.tryParse(match.group(1)!) : null;
+        candidates.add(
+          YouTubeStreamCandidate(
+            videoId: video.id.value,
+            url: streamUrl,
+            mimeType: s.container.name,
+            audioCodec: s.audioCodec,
+            bitrate: s.bitrate.bitsPerSecond,
+            isAudioOnly: true,
+            expireAt: exp,
+            resolver: 'youtube_explode_audio_only',
+          ),
+        );
+      }
 
-      final int audioCount = audioOnlyList.length;
-      final int muxedCount = muxedList.length;
-
-      if (audioOnlyList.isNotEmpty) {
-        List<AudioOnlyStreamInfo> candidateStreams = audioOnlyList;
-        if (Platform.isIOS || Platform.isMacOS) {
-          final List<AudioOnlyStreamInfo> m4aStreams = audioOnlyList
-              .where((element) => element.audioCodec.contains('mp4'))
-              .toList();
-
-          if (m4aStreams.isNotEmpty) {
-            candidateStreams = m4aStreams;
-          }
+      if (candidates.isEmpty) {
+        for (final s in manifest.muxed) {
+          final String streamUrl = s.url.toString();
+          if (streamUrl.isEmpty || streamUrl == 'null') continue;
+          if (!s.audioCodec.contains('mp4a') &&
+              !s.audioCodec.contains('opus') &&
+              !s.audioCodec.contains('aac')) continue;
+          final match = RegExp(r'expire=([0-9]+)').firstMatch(streamUrl);
+          final int? exp = match != null ? int.tryParse(match.group(1)!) : null;
+          candidates.add(
+            YouTubeStreamCandidate(
+              videoId: video.id.value,
+              url: streamUrl,
+              mimeType: s.container.name,
+              audioCodec: s.audioCodec,
+              bitrate: s.bitrate.bitsPerSecond,
+              isAudioOnly: false,
+              expireAt: exp,
+              resolver: 'youtube_explode_muxed',
+            ),
+          );
         }
+      }
 
-        final AudioOnlyStreamInfo lowStream = candidateStreams.first;
-        final AudioOnlyStreamInfo highStream = candidateStreams.last;
-
+      final List<String> urls = selectStreamUrls(candidates);
+      if (urls.isNotEmpty) {
         Logger.root.info(
           '[Stage 2: Manifest Extraction] Succeeded in ${stopwatch.elapsedMilliseconds}ms for ${video.id.value} | '
-          'Audio streams: $audioCount | '
-          'Low: ${lowStream.bitrate.kiloBitsPerSecond}kbps (${lowStream.audioCodec}) | '
-          'High: ${highStream.bitrate.kiloBitsPerSecond}kbps (${highStream.audioCodec})',
+          'Candidates: ${candidates.length} | '
+          'Low: ${candidates.first.bitrate ~/ 1000}kbps (${candidates.first.audioCodec}) | '
+          'High: ${candidates.last.bitrate ~/ 1000}kbps (${candidates.last.audioCodec})',
         );
-
-        return [
-          lowStream.url.toString(),
-          highStream.url.toString(),
-        ];
-      } else if (muxedList.isNotEmpty) {
-        final selectedLow = muxedList.first;
-        final selectedHigh = muxedList.last;
-        Logger.root.info(
-          '[Stage 2: Manifest Extraction] Using muxed fallback for ${video.id.value} in ${stopwatch.elapsedMilliseconds}ms | '
-          'Muxed streams: $muxedCount (container: ${selectedHigh.container.name}, bitrate: ${selectedHigh.bitrate.kiloBitsPerSecond}kbps)',
-        );
-        return [selectedLow.url.toString(), selectedHigh.url.toString()];
+        return urls;
       } else {
         Logger.root.warning(
-          '[Stage 2: Manifest Extraction] Empty stream manifest for ${video.id.value} after ${stopwatch.elapsedMilliseconds}ms, falling back to InnerTube',
+          '[Stage 2: Manifest Extraction] Empty valid streams for ${video.id.value} after ${stopwatch.elapsedMilliseconds}ms, falling back to InnerTube',
         );
       }
     } catch (e) {
@@ -1162,3 +1296,4 @@ class YouTubeServices {
     return [];
   }
 }
+
