@@ -87,7 +87,7 @@ class _AboutPageState extends State<AboutPage> {
                           )!
                               .versionSub,
                         ),
-                        onTap: () {
+                        onTap: () async {
                           ShowSnackBar().showSnackBar(
                             context,
                             AppLocalizations.of(
@@ -97,54 +97,54 @@ class _AboutPageState extends State<AboutPage> {
                             noAction: true,
                           );
 
-                          GitHub.getLatestVersion().then(
-                            (String latestVersion) async {
-                              if (compareVersion(
-                                latestVersion,
-                                appVersion!,
-                              )) {
-                                List? abis = await Hive.box('settings')
-                                    .get('supportedAbis') as List?;
+                          final result =
+                              await GitHub.checkUpdate(appVersion ?? '1.15.8');
+                          if (!mounted) return;
 
-                                if (abis == null) {
-                                  final DeviceInfoPlugin deviceInfo =
-                                      DeviceInfoPlugin();
-                                  final AndroidDeviceInfo androidDeviceInfo =
-                                      await deviceInfo.androidInfo;
-                                  abis = androidDeviceInfo.supportedAbis;
-                                  await Hive.box('settings')
-                                      .put('supportedAbis', abis);
-                                }
-                                ShowSnackBar().showSnackBar(
+                          switch (result.status) {
+                            case UpdateCheckStatus.updateAvailable:
+                              ShowSnackBar().showSnackBar(
+                                context,
+                                AppLocalizations.of(context)!.updateAvailable,
+                                duration: const Duration(seconds: 15),
+                                action: SnackBarAction(
+                                  textColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  label: AppLocalizations.of(context)!.update,
+                                  onPressed: () {
+                                    launchUrl(
+                                      Uri.parse(
+                                        result.releaseUrl ??
+                                            'https://github.com/${GitHub.repo}/releases',
+                                      ),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  },
+                                ),
+                              );
+                              break;
+                            case UpdateCheckStatus.upToDate:
+                              ShowSnackBar().showSnackBar(
+                                context,
+                                AppLocalizations.of(
                                   context,
-                                  AppLocalizations.of(context)!.updateAvailable,
-                                  duration: const Duration(seconds: 15),
-                                  action: SnackBarAction(
-                                    textColor:
-                                        Theme.of(context).colorScheme.secondary,
-                                    label: AppLocalizations.of(context)!.update,
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      launchUrl(
-                                        Uri.parse(
-                                          'https://sangwan5688.github.io/download/',
-                                        ),
-                                        mode: LaunchMode.externalApplication,
-                                      );
-                                    },
-                                  ),
-                                );
-                              } else {
-                                ShowSnackBar().showSnackBar(
-                                  context,
-                                  AppLocalizations.of(
-                                    context,
-                                  )!
-                                      .latest,
-                                );
-                              }
-                            },
-                          );
+                                )!
+                                    .latest,
+                              );
+                              break;
+                            case UpdateCheckStatus.noReleasesFound:
+                              ShowSnackBar().showSnackBar(
+                                context,
+                                'No published releases found for ${GitHub.repo}.',
+                              );
+                              break;
+                            case UpdateCheckStatus.failed:
+                              ShowSnackBar().showSnackBar(
+                                context,
+                                'Unable to check for updates. Please try again later.',
+                              );
+                              break;
+                          }
                         },
                         trailing: Text(
                           'v$appVersion',
@@ -189,11 +189,9 @@ class _AboutPageState extends State<AboutPage> {
                         ),
                         dense: true,
                         onTap: () {
-                          launchUrl(
-                            Uri.parse(
-                              'https://www.buymeacoffee.com/ankitsangwan',
-                            ),
-                            mode: LaunchMode.externalApplication,
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            'Donation options coming soon',
                           );
                         },
                       ),
@@ -213,21 +211,15 @@ class _AboutPageState extends State<AboutPage> {
                         dense: true,
                         isThreeLine: true,
                         onTap: () {
-                          const String upiUrl =
-                              'upi://pay?pa=ankit.sangwan.5688@oksbi&pn=BlackHole';
-                          launchUrl(
-                            Uri.parse(upiUrl),
-                            mode: LaunchMode.externalApplication,
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            'Donation options coming soon',
                           );
                         },
                         onLongPress: () {
-                          copyToClipboard(
-                            context: context,
-                            text: 'ankit.sangwan.5688@oksbi',
-                            displayText: AppLocalizations.of(
-                              context,
-                            )!
-                                .upiCopied,
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            'Donation options coming soon',
                           );
                         },
                         trailing: TextButton(
@@ -238,13 +230,9 @@ class _AboutPageState extends State<AboutPage> {
                                     : Colors.grey[700],
                           ),
                           onPressed: () {
-                            copyToClipboard(
-                              context: context,
-                              text: 'ankit.sangwan.5688@oksbi',
-                              displayText: AppLocalizations.of(
-                                context,
-                              )!
-                                  .upiCopied,
+                            ShowSnackBar().showSnackBar(
+                              context,
+                              'Donation options coming soon',
                             );
                           },
                           child: Text(
@@ -505,10 +493,10 @@ class _AboutPageState extends State<AboutPage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(5, 30, 5, 20),
                       child: Center(
-                        child: Text(
-                          AppLocalizations.of(context)!.madeBy,
+                        child: const Text(
+                          'Made with ❤️ by Black Hole',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 12),
+                          style: TextStyle(fontSize: 12),
                         ),
                       ),
                     ),

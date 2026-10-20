@@ -220,7 +220,7 @@ class _ArtistSearchPageState extends State<ArtistSearchPage> {
                                       const SizedBox(width: 20),
                                       Expanded(
                                         child: GestureDetector(
-                                          onTap: () {
+                                          onTap: () async {
                                             ShowSnackBar().showSnackBar(
                                               context,
                                               AppLocalizations.of(
@@ -231,35 +231,70 @@ class _ArtistSearchPageState extends State<ArtistSearchPage> {
                                                 seconds: 2,
                                               ),
                                             );
-                                            SaavnAPI().createRadio(
-                                              names: [
-                                                widget.data['title']
-                                                        ?.toString() ??
-                                                    '',
-                                              ],
-                                              language: widget.data['language']
-                                                      ?.toString() ??
-                                                  'hindi',
-                                              stationType: 'artist',
-                                            ).then((value) {
-                                              if (value != null) {
-                                                SaavnAPI()
+                                            try {
+                                              final artistName = widget
+                                                          .data['title']
+                                                      ?.toString()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? widget.data['title'].toString()
+                                              : (widget.data['name']
+                                                          ?.toString()
+                                                          .isNotEmpty ==
+                                                      true
+                                                  ? widget.data['name']
+                                                      .toString()
+                                                  : '');
+                                              final lang = widget.data['language']
+                                                  ?.toString();
+                                              final stationId = await SaavnAPI()
+                                                  .createRadio(
+                                                names: [artistName],
+                                                language: lang,
+                                                stationType: 'artist',
+                                              );
+                                              if (stationId != null &&
+                                                  stationId.isNotEmpty) {
+                                                final songs = await SaavnAPI()
                                                     .getRadioSongs(
-                                                  stationId: value,
-                                                )
-                                                    .then((value) {
+                                                  stationId: stationId,
+                                                );
+                                                if (songs.isNotEmpty) {
                                                   PlayerInvoke.init(
-                                                    songsList: value,
+                                                    songsList: songs,
                                                     index: 0,
                                                     isOffline: false,
                                                   );
-                                                  Navigator.pushNamed(
+                                                  if (context.mounted) {
+                                                    Navigator.pushNamed(
+                                                      context,
+                                                      '/player',
+                                                    );
+                                                  }
+                                                } else {
+                                                  if (context.mounted) {
+                                                    ShowSnackBar().showSnackBar(
+                                                      context,
+                                                      'Failed to connect to Radio',
+                                                    );
+                                                  }
+                                                }
+                                              } else {
+                                                if (context.mounted) {
+                                                  ShowSnackBar().showSnackBar(
                                                     context,
-                                                    '/player',
+                                                    'Failed to connect to Radio',
                                                   );
-                                                });
+                                                }
                                               }
-                                            });
+                                            } catch (e) {
+                                              if (context.mounted) {
+                                                ShowSnackBar().showSnackBar(
+                                                  context,
+                                                  'Failed to connect to Radio',
+                                                );
+                                              }
+                                            }
                                           },
                                           child: Container(
                                             margin: const EdgeInsets.symmetric(

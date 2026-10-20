@@ -19,8 +19,30 @@
 
 import 'dart:convert';
 
+import 'package:blackhole/Helpers/update.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
+
+enum UpdateCheckStatus {
+  updateAvailable,
+  upToDate,
+  noReleasesFound,
+  failed,
+}
+
+class UpdateCheckResult {
+  final UpdateCheckStatus status;
+  final String? latestVersion;
+  final String? releaseUrl;
+  final String? message;
+
+  const UpdateCheckResult({
+    required this.status,
+    this.latestVersion,
+    this.releaseUrl,
+    this.message,
+  });
+}
 
 class GitHub {
   static String repo = 'thevibingteen/BlackHole';
@@ -89,9 +111,68 @@ class GitHub {
     return {};
   }
 
+  static Future<UpdateCheckResult> checkUpdate(String currentVersion) async {
+    Logger.root.info('Checking for update for $repo');
+    try {
+      final res = await getResponse();
+      if (res.statusCode == 200) {
+        final decoded = json.decode(res.body);
+        if (decoded is List) {
+          if (decoded.isEmpty) {
+            return const UpdateCheckResult(
+              status: UpdateCheckStatus.noReleasesFound,
+              message: 'No published releases found',
+            );
+          }
+          final latestRelease = decoded[0] as Map;
+          final rawTag = latestRelease['tag_name']?.toString() ?? '';
+          final cleanVersion = rawTag.replaceAll(RegExp(r'^[vV]'), '').trim();
+          if (cleanVersion.isEmpty) {
+            return const UpdateCheckResult(
+              status: UpdateCheckStatus.failed,
+              message: 'Invalid release version tag',
+            );
+          }
+          final isNewer = compareVersion(cleanVersion, currentVersion);
+          final releaseUrl = latestRelease['html_url']?.toString() ??
+              'https://github.com/$repo/releases';
+          if (isNewer) {
+            return UpdateCheckResult(
+              status: UpdateCheckStatus.updateAvailable,
+              latestVersion: cleanVersion,
+              releaseUrl: releaseUrl,
+            );
+          } else {
+            return UpdateCheckResult(
+              status: UpdateCheckStatus.upToDate,
+              latestVersion: cleanVersion,
+              releaseUrl: releaseUrl,
+            );
+          }
+        } else if (decoded is Map && decoded.containsKey('message')) {
+          return UpdateCheckResult(
+            status: UpdateCheckStatus.failed,
+            message: decoded['message']?.toString(),
+          );
+        }
+      }
+      return UpdateCheckResult(
+        status: UpdateCheckStatus.failed,
+        message: 'HTTP ${res.statusCode}',
+      );
+    } catch (e) {
+      Logger.root.severe('Error checking update: $e');
+      return UpdateCheckResult(
+        status: UpdateCheckStatus.failed,
+        message: e.toString(),
+      );
+    }
+  }
+
   static Future<String> getLatestVersion() async {
     Logger.root.info('Checking for update');
     final Map latestRelease = await fetchReleases();
+    if (latestRelease.isEmpty) return '0.0.0';
     Logger.root.info(
       'Latest release: ${(latestRelease["tag_name"] as String?) ?? "v0.0.0"}',
     );

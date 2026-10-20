@@ -1,14 +1,16 @@
 import 'package:blackhole/APIs/api.dart';
-import 'package:blackhole/Helpers/image_resolution_modifier.dart';
-import 'dart:convert';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/Helpers/format.dart';
+import 'package:blackhole/Helpers/github.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Helpers/lyrics.dart';
 import 'package:blackhole/Helpers/mediaitem_converter.dart';
+import 'package:blackhole/Helpers/search_add_playlist.dart';
 import 'package:blackhole/Helpers/update.dart';
 import 'package:blackhole/Services/youtube_services.dart';
 import 'package:blackhole/Services/yt_music.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
 
 void main() {
   group('Lyrics Backend & HTML Rejection Tests', () {
@@ -1601,40 +1603,292 @@ void main() {
     });
   });
 
-  group('Bug 4: YouTube & Media Thumbnail Hardening Tests', () {
+  group('Restored YouTube Subsystem & Media URL Hardening Tests', () {
     test('getImageUrl normalizes protocol-relative and http URLs', () {
       expect(getImageUrl('//c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
       expect(getImageUrl('http://c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
       expect(getImageUrl('https://c.saavncdn.com/123.jpg'), equals('https://c.saavncdn.com/123.jpg'));
     });
 
-    test('extractThumbnailUrl handles single and multi-item lists without RangeError', () {
-      final thumbsSingle = [
-        {'url': 'https://i.ytimg.com/vi/abc/hqdefault.jpg'}
+    test('formatChartItems correctly maps restored gridPlaylistRenderer structure', () {
+      final input = [
+        {
+          'gridPlaylistRenderer': {
+            'title': {
+              'runs': [
+                {'text': 'Top 50 India'}
+              ]
+            },
+            'shortBylineText': {
+              'runs': [
+                {'text': 'Trending charts'}
+              ]
+            },
+            'videoCountText': {
+              'runs': [
+                {'text': '50 tracks'}
+              ]
+            },
+            'navigationEndpoint': {
+              'watchEndpoint': {
+                'playlistId': 'PLchart123',
+                'videoId': 'vid987',
+              }
+            },
+            'thumbnail': {
+              'thumbnails': [
+                {'url': 'https://i.ytimg.com/vi/vid987/hqdefault.jpg'}
+              ]
+            }
+          }
+        }
       ];
-      expect(YouTubeServices.extractThumbnailUrl(thumbsSingle, index: 0),
-          equals('https://i.ytimg.com/vi/abc/hqdefault.jpg'));
-      expect(YouTubeServices.extractThumbnailUrl(thumbsSingle, index: 2),
-          equals('https://i.ytimg.com/vi/abc/hqdefault.jpg'));
-      expect(YouTubeServices.extractThumbnailUrl(thumbsSingle, index: -1),
-          equals('https://i.ytimg.com/vi/abc/hqdefault.jpg'));
+      final res = YouTubeServices().formatChartItems(input);
+      expect(res.length, equals(1));
+      expect(res[0]['title'], equals('Top 50 India'));
+      expect(res[0]['type'], equals('chart'));
+      expect(res[0]['playlistId'], equals('PLchart123'));
+      expect(res[0]['firstItemId'], equals('vid987'));
+      expect(res[0]['image'], equals('https://i.ytimg.com/vi/vid987/hqdefault.jpg'));
     });
 
-    test('extractThumbnailUrl handles protocol-relative and nested lists', () {
-      final nestedThumbs = [
-        [
-          {'url': '//i.ytimg.com/vi/xyz/mqdefault.jpg'}
-        ]
-      ];
-      expect(YouTubeServices.extractThumbnailUrl(nestedThumbs),
-          equals('https://i.ytimg.com/vi/xyz/mqdefault.jpg'));
+    test('formatItems handles empty or malformed inputs without throwing', () {
+      final resEmpty = YouTubeServices().formatItems([]);
+      expect(resEmpty, isEmpty);
+
+      final resMalformed = YouTubeServices().formatItems([{'bad': 'data'}]);
+      expect(resMalformed, isEmpty);
     });
 
-    test('extractThumbnailUrl falls back to deterministic 11-char video ID', () {
-      expect(YouTubeServices.extractThumbnailUrl([], videoId: 'dQw4w9WgXcQ'),
-          equals('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'));
-      expect(YouTubeServices.extractThumbnailUrl([], videoId: 'PL1234567890'),
-          equals(''));
+    test('formatHeadItems maps promo renderer video structure safely', () {
+      final input = [
+        {
+          'defaultPromoPanelRenderer': {
+            'title': {
+              'runs': [
+                {'text': 'Headline Special'}
+              ]
+            },
+            'description': {
+              'runs': [
+                {'text': 'Exclusive audio release'}
+              ]
+            },
+            'navigationEndpoint': {
+              'watchEndpoint': {
+                'videoId': 'promo123',
+              }
+            },
+            'largeFormFactorBackgroundThumbnail': {
+              'thumbnailLandscapePortraitRenderer': {
+                'landscape': {
+                  'thumbnails': [
+                    {'url': 'https://i.ytimg.com/vi/promo123/thumb0.jpg'},
+                    {'url': 'https://i.ytimg.com/vi/promo123/thumb1.jpg'},
+                    {'url': 'https://i.ytimg.com/vi/promo123/thumb2.jpg'},
+                    {'url': 'https://i.ytimg.com/vi/promo123/thumb3.jpg'},
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ];
+      final res = YouTubeServices().formatHeadItems(input);
+      expect(res.length, equals(1));
+      expect(res[0]['title'], equals('Headline Special'));
+      expect(res[0]['navigationEndpoint'], equals('promo123'));
+      expect(res[0]['imageMax'], equals('https://i.ytimg.com/vi/promo123/thumb3.jpg'));
+    });
+  });
+
+  group('JioSaavn Radio Backend & Home Screen Hardening Tests', () {
+    test('buildHomeLists preserves radio section even when server radio list is empty', () async {
+      final input = {
+        'collections': ['radio'],
+        'modules': {
+          'radio': {
+            'title': 'Radio Stations',
+            'subtitle': 'Live stations',
+            'position': '1',
+          }
+        },
+        'radio': [],
+      };
+      final res = FormatResponse.buildHomeLists(
+        input,
+        {},
+        likedRadioList: [
+          {'id': 'saved_station'}
+        ],
+        preferredLangs: {'hindi'},
+      );
+      expect(res, isA<List>());
+      expect(res.contains('radio'), isTrue);
+    });
+
+    test('formatSongsResponse skips non-Map entries safely', () async {
+      final input = [
+        {'id': 'song1', 'title': 'Valid Song', 'type': 'song'},
+        null,
+        'malformed_string',
+        12345,
+        {'id': 'song2', 'title': 'Second Song', 'type': 'song'},
+      ];
+      final res = await FormatResponse.formatSongsResponse(input, 'song');
+      expect(res.length, equals(2));
+      expect(res[0]['title'], equals('Valid Song'));
+      expect(res[1]['title'], equals('Second Song'));
+    });
+
+    test('Radio stations parsing filters metadata keys and extracts songs correctly', () {
+      final rawRadioResponse = {
+        'stationid': 'webradio_12345',
+        '0': {
+          'song': {
+            'id': 's1',
+            'title': 'Radio Track 1',
+            'type': 'song',
+          }
+        },
+        '1': {
+          'song': {
+            'id': 's2',
+            'title': 'Radio Track 2',
+            'type': 'song',
+          }
+        },
+        'extra_key': 'ignored',
+      };
+      final songList = <Map>[];
+      rawRadioResponse.forEach((key, value) {
+        if (int.tryParse(key.toString()) != null && value is Map && value['song'] is Map) {
+          songList.add(value['song'] as Map);
+        }
+      });
+      expect(songList.length, equals(2));
+      expect(songList[0]['title'], equals('Radio Track 1'));
+      expect(songList[1]['title'], equals('Radio Track 2'));
+    });
+
+    test('Radio parser handles fewer songs than count without exception', () {
+      final rawRadioResponse = {
+        'stationid': 'artist_radio_999',
+        '0': {
+          'song': {
+            'id': 'only_song',
+            'title': 'Solo Station Song',
+            'type': 'song',
+          }
+        },
+      };
+      final songList = <Map>[];
+      rawRadioResponse.forEach((key, value) {
+        if (int.tryParse(key.toString()) != null && value is Map && value['song'] is Map) {
+          songList.add(value['song'] as Map);
+        }
+      });
+      expect(songList.length, equals(1));
+      expect(songList[0]['title'], equals('Solo Station Song'));
+    });
+  });
+
+  group('Playlist Imports & Deezer Provider Tests', () {
+    test('parseDeezerPlaylistId extracts ID from numeric strings and URLs', () async {
+      expect(await SearchAddPlaylist.parseDeezerPlaylistId('908622995'), equals('908622995'));
+      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://www.deezer.com/playlist/908622995'), equals('908622995'));
+      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://www.deezer.com/en/playlist/908622995?utm_source=test'), equals('908622995'));
+      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://www.deezer.com/fr/playlist/123456789/'), equals('123456789'));
+      expect(await SearchAddPlaylist.parseDeezerPlaylistId('https://invalid.com/track/123'), isNull);
+    });
+
+    test('parseJioSaavnToken parses URLs with trailing slashes and query params', () {
+      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde'), equals('abcde'));
+      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde?autoplay=true'), equals('abcde'));
+      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde/'), equals('abcde'));
+      expect(SearchAddPlaylist.parseJioSaavnToken('https://www.jiosaavn.com/featured/romantic-hindi/abcde/?param=1&param=2'), equals('abcde'));
+      expect(SearchAddPlaylist.parseJioSaavnToken('abcde'), equals('abcde'));
+    });
+
+    test('YouTube playlist link parser extracts playlistId across domains', () {
+      const standardYt = 'https://www.youtube.com/playlist?list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1';
+      const musicYt = 'https://music.youtube.com/playlist?list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1';
+      const withExtra = 'https://www.youtube.com/watch?v=vid123&list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1&index=2';
+
+      final matchStandard = RegExp(r'[?&]list=([^#&]+)').firstMatch(standardYt);
+      final matchMusic = RegExp(r'[?&]list=([^#&]+)').firstMatch(musicYt);
+      final matchExtra = RegExp(r'[?&]list=([^#&]+)').firstMatch(withExtra);
+
+      expect(matchStandard?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+      expect(matchMusic?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+      expect(matchExtra?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+    });
+
+    test('Deezer track data structure normalizes properly', () {
+      final deezerTrack = {
+        'id': 116348632,
+        'title': 'Hey Jude',
+        'duration': 429,
+        'artist': {'name': 'The Beatles'},
+        'album': {'title': '1 (Remastered)'},
+      };
+      final title = deezerTrack['title']?.toString();
+      final artist = (deezerTrack['artist'] as Map)['name']?.toString();
+      final query = '$title by $artist';
+      expect(title, equals('Hey Jude'));
+      expect(artist, equals('The Beatles'));
+      expect(query, equals('Hey Jude by The Beatles'));
+    });
+  });
+
+  group('Semantic Version Comparison & GitHub Update Engine Tests', () {
+    test('compareVersion detects updates correctly across formats', () {
+      // Newer release should report update available
+      expect(compareVersion('1.15.9', '1.15.8'), isTrue);
+      expect(compareVersion('1.16.0', '1.15.8'), isTrue);
+      expect(compareVersion('2.0.0', '1.15.8'), isTrue);
+
+      // Same or older release should not report update
+      expect(compareVersion('1.15.8', '1.15.8'), isFalse);
+      expect(compareVersion('1.15.7', '1.15.8'), isFalse);
+      expect(compareVersion('1.15.8', '1.16.0'), isFalse);
+      expect(compareVersion('1.15.8', '2.0.0'), isFalse);
+
+      // Handles 'v' prefix
+      expect(compareVersion('v1.15.9', 'v1.15.8'), isTrue);
+      expect(compareVersion('v1.15.9', '1.15.8'), isTrue);
+      expect(compareVersion('1.15.8', 'v1.15.9'), isFalse);
+
+      // Handles shorter/longer components
+      expect(compareVersion('1.15.1', '1.15'), isTrue);
+      expect(compareVersion('1.15', '1.15.1'), isFalse);
+
+      // Handles pre-release suffixes
+      expect(compareVersion('1.15.8-beta', '1.15.8'), isFalse);
+      expect(compareVersion('1.15.9', '1.15.8-beta'), isTrue);
+    });
+
+    test('GitHub update checker result model and status values', () {
+      final available = UpdateCheckResult(
+        status: UpdateCheckStatus.updateAvailable,
+        latestVersion: '1.15.9',
+        releaseUrl: 'https://github.com/thevibingteen/BlackHole/releases/tag/v1.15.9',
+      );
+      expect(available.status, equals(UpdateCheckStatus.updateAvailable));
+      expect(available.latestVersion, equals('1.15.9'));
+
+      final upToDate = UpdateCheckResult(
+        status: UpdateCheckStatus.upToDate,
+        latestVersion: '1.15.8',
+      );
+      expect(upToDate.status, equals(UpdateCheckStatus.upToDate));
+
+      final failed = UpdateCheckResult(
+        status: UpdateCheckStatus.failed,
+        message: 'Network timeout',
+      );
+      expect(failed.status, equals(UpdateCheckStatus.failed));
+      expect(failed.message, equals('Network timeout'));
     });
   });
 }

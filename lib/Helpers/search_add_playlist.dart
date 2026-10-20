@@ -33,14 +33,18 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 // ignore: avoid_classes_with_only_static_members
 class SearchAddPlaylist {
   static Future<Map> addYtPlaylist(String inLink) async {
-    final String link = '$inLink&';
     try {
-      final RegExpMatch? id = RegExp(r'.*list\=(.*?)&').firstMatch(link);
-      if (id != null) {
+      final trimmed = inLink.trim();
+      final match = RegExp(r'[?&]list=([^#&]+)').firstMatch(trimmed);
+      String? playlistId = match?.group(1);
+      if (playlistId == null && !trimmed.contains('/') && trimmed.length >= 10) {
+        playlistId = trimmed;
+      }
+      if (playlistId != null && playlistId.isNotEmpty) {
         final Playlist metadata =
-            await YouTubeServices().getPlaylistDetails(id[1]!);
+            await YouTubeServices().getPlaylistDetails(playlistId);
         final List<Video> tracks =
-            await YouTubeServices().getPlaylistSongs(id[1]!);
+            await YouTubeServices().getPlaylistSongs(playlistId);
         return {
           'title': metadata.title,
           'image': metadata.thumbnails.standardResUrl,
@@ -73,6 +77,136 @@ class SearchAddPlaylist {
     } catch (e) {
       Logger.root.severe('Error while adding Spotify playlist: $e');
       return {};
+    }
+  }
+
+  static Future<String?> parseDeezerPlaylistId(String link) async {
+    final trimmed = link.trim();
+    if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+    final match = RegExp(r'playlist\/(\d+)').firstMatch(trimmed);
+    if (match != null) {
+      return match.group(1);
+    }
+    if (trimmed.contains('deezer.page.link') || trimmed.contains('deezer.com')) {
+      try {
+        final req = Request('GET', Uri.parse(trimmed))..followRedirects = false;
+        final client = Client();
+        final streamed =
+            await client.send(req).timeout(const Duration(seconds: 10));
+        client.close();
+        final location = streamed.headers['location'];
+        if (location != null && location.isNotEmpty) {
+          final locMatch = RegExp(r'playlist\/(\d+)').firstMatch(location);
+          if (locMatch != null) {
+            return locMatch.group(1);
+          }
+        }
+      } catch (e) {
+        Logger.root.warning('Failed to resolve Deezer redirect: $e');
+      }
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>> getDeezerPlaylistDetails({
+    required String playlistId,
+  }) async {
+    final Uri link = Uri.parse('https://api.deezer.com/playlist/$playlistId');
+    try {
+      final Response response =
+          await get(link).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        Logger.root.warning('Deezer API returned ${response.statusCode}');
+        return {};
+      }
+      final dynamic res = jsonDecode(response.body);
+      if (res is! Map) return {};
+      if (res['error'] != null) {
+        Logger.root.warning('Deezer API error: ${res['error']}');
+        return {};
+      }
+      final String title = res['title']?.toString() ?? 'Deezer Playlist';
+      final List allTracks = [];
+      if (res['tracks'] is Map && res['tracks']['data'] is List) {
+        allTracks.addAll(res['tracks']['data'] as List);
+        String? nextUrl = res['tracks']['next']?.toString();
+        while (nextUrl != null &&
+            nextUrl.isNotEmpty &&
+            allTracks.length < 500) {
+          try {
+            final pageRes = await get(Uri.parse(nextUrl))
+                .timeout(const Duration(seconds: 10));
+            if (pageRes.statusCode == 200) {
+              final dynamic pageJson = jsonDecode(pageRes.body);
+              if (pageJson is Map && pageJson['data'] is List) {
+                allTracks.addAll(pageJson['data'] as List);
+                nextUrl = pageJson['next']?.toString();
+              } else {
+                break;
+              }
+            } else {
+              break;
+            }
+          } catch (_) {
+            break;
+          }
+        }
+      }
+      return {
+        'title': title,
+        'count': allTracks.length,
+        'tracks': allTracks,
+        'image': res['picture_medium']?.toString() ?? '',
+      };
+    } catch (e) {
+      Logger.root.severe('Error fetching Deezer playlist: $e');
+      return {};
+    }
+  }
+
+  static Future<Map> addDeezerPlaylist(String inLink) async {
+    try {
+      final String? playlistId = await parseDeezerPlaylistId(inLink);
+      if (playlistId != null && playlistId.isNotEmpty) {
+        return await getDeezerPlaylistDetails(playlistId: playlistId);
+      }
+      return {};
+    } catch (e) {
+      Logger.root.severe('Error while adding Deezer playlist: $e');
+      return {};
+    }
+  }
+
+  static Stream<Map> deezerSongsAdder(String playName, List tracks) async* {
+    int done = 0;
+    for (final track in tracks) {
+      String? trackName;
+      String? artistName;
+      try {
+        trackName = track['title']?.toString() ?? '';
+        artistName = track['artist']?['name']?.toString() ?? '';
+        final displayName = artistName.isNotEmpty
+            ? '$trackName - $artistName'
+            : trackName;
+        yield {'done': ++done, 'name': displayName};
+      } catch (e) {
+        yield {'done': ++done, 'name': ''};
+      }
+      try {
+        final query = (artistName != null && artistName.isNotEmpty)
+            ? '$trackName by $artistName'
+            : (trackName ?? '');
+        if (query.isNotEmpty) {
+          final List result = await SaavnAPI().fetchTopSearchResult(query);
+          if (result.isNotEmpty && result[0] is Map) {
+            addMapToPlaylist(playName, result[0] as Map);
+          }
+        }
+      } catch (e) {
+        Logger.root.severe('Error adding track $done: $e');
+      }
     }
   }
 
@@ -134,17 +268,33 @@ class SearchAddPlaylist {
     return [];
   }
 
+  static String parseJioSaavnToken(String inLink) {
+    try {
+      final uri = Uri.parse(inLink.trim());
+      final pathSegments =
+          uri.pathSegments.where((s) => s.isNotEmpty).toList();
+      if (pathSegments.isNotEmpty) {
+        return pathSegments.last;
+      }
+    } catch (_) {}
+    final cleaned =
+        inLink.trim().split('?').first.replaceAll(RegExp(r'/+$'), '');
+    return cleaned.split('/').last;
+  }
+
   static Future<Map> addJioSaavnPlaylist(String inLink) async {
     try {
-      final String id = inLink.split('/').last;
-      if (id != '') {
+      final String id = parseJioSaavnToken(inLink);
+      if (id.isNotEmpty) {
         final Map data =
             await SaavnAPI().getSongFromToken(id, 'playlist', n: -1);
-        return {
-          'title': data['title'],
-          'count': data['list'].length,
-          'tracks': data['list'],
-        };
+        if (data.isNotEmpty && data['list'] is List) {
+          return {
+            'title': data['title'] ?? 'JioSaavn Playlist',
+            'count': (data['list'] as List).length,
+            'tracks': data['list'],
+          };
+        }
       }
       return {};
     } catch (e) {

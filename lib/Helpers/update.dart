@@ -20,21 +20,33 @@
 import 'package:logging/logging.dart';
 
 bool compareVersion(String latestVersion, String currentVersion) {
-  bool update = false;
-  final List latestList = latestVersion.split('.');
-  final List currentList = currentVersion.split('.');
+  try {
+    final cleanLatest = latestVersion.trim().replaceAll(RegExp(r'^[vV]'), '');
+    final cleanCurrent = currentVersion.trim().replaceAll(RegExp(r'^[vV]'), '');
 
-  for (int i = 0; i < latestList.length; i++) {
-    try {
-      if (int.parse(latestList[i] as String) >
-          int.parse(currentList[i] as String)) {
-        update = true;
-        break;
-      }
-    } catch (e) {
-      Logger.root.severe('Error while comparing versions: $e');
-      break;
+    List<int> parseParts(String v) {
+      return v.split('.').map((p) {
+        final digits = RegExp(r'^\d+').firstMatch(p)?.group(0);
+        return digits != null ? int.parse(digits) : 0;
+      }).toList();
     }
+
+    final latestParts = parseParts(cleanLatest);
+    final currentParts = parseParts(cleanCurrent);
+
+    final maxLen = latestParts.length > currentParts.length
+        ? latestParts.length
+        : currentParts.length;
+
+    for (int i = 0; i < maxLen; i++) {
+      final l = i < latestParts.length ? latestParts[i] : 0;
+      final c = i < currentParts.length ? currentParts[i] : 0;
+      if (l > c) return true;
+      if (l < c) return false;
+    }
+    return false;
+  } catch (e) {
+    Logger.root.severe('Error while comparing versions: $e');
+    return false;
   }
-  return update;
 }

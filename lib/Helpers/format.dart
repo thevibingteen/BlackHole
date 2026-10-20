@@ -53,6 +53,7 @@ class FormatResponse {
   ) async {
     final List searchedList = [];
     for (int i = 0; i < responseList.length; i++) {
+      if (responseList[i] is! Map) continue;
       Map? response;
       switch (type) {
         case 'song':
@@ -831,7 +832,9 @@ class FormatResponse {
       final items = homeData[colKey];
       final modTitle =
           homeData['modules']?[colKey]?['title']?.toString() ?? '';
-      final isRadio = modTitle == 'Radio Stations';
+      final isRadio = colKey == 'radio' ||
+          modTitle == 'Radio Stations' ||
+          modTitle.toLowerCase().contains('radio');
 
       if (moduleMatchesUnselectedLanguage(modTitle, activeLangs)) {
         continue;

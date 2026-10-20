@@ -19,6 +19,7 @@
 
 import 'package:blackhole/CustomWidgets/copy_clipboard.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
+import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -134,7 +135,7 @@ class _AboutScreenState extends State<AboutScreen> {
                           onPressed: () {
                             launchUrl(
                               Uri.parse(
-                                'https://github.com/Sangwan5688/BlackHole',
+                                'https://github.com/thevibingteen/BlackHole',
                               ),
                               mode: LaunchMode.externalApplication,
                             );
@@ -170,11 +171,9 @@ class _AboutScreenState extends State<AboutScreen> {
                           foregroundColor: Colors.transparent,
                         ),
                         onPressed: () {
-                          launchUrl(
-                            Uri.parse(
-                              'https://www.buymeacoffee.com/ankitsangwan',
-                            ),
-                            mode: LaunchMode.externalApplication,
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            'Donation options coming soon',
                           );
                         },
                         child: SizedBox(
@@ -196,21 +195,15 @@ class _AboutScreenState extends State<AboutScreen> {
                           foregroundColor: Colors.transparent,
                         ),
                         onPressed: () {
-                          const String upiUrl =
-                              'upi://pay?pa=ankit.sangwan.5688@oksbi&pn=BlackHole&mc=5732&aid=uGICAgIDn98OpSw&tr=BCR2DN6T37O6DB3Q';
-                          launchUrl(
-                            Uri.parse(upiUrl),
-                            mode: LaunchMode.externalApplication,
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            'Donation options coming soon',
                           );
                         },
                         onLongPress: () {
-                          copyToClipboard(
-                            context: context,
-                            text: 'ankit.sangwan.5688@oksbi',
-                            displayText: AppLocalizations.of(
-                              context,
-                            )!
-                                .upiCopied,
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            'Donation options coming soon',
                           );
                         },
                         child: SizedBox(
@@ -238,9 +231,9 @@ class _AboutScreenState extends State<AboutScreen> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(5, 30, 5, 20),
                       child: Center(
-                        child: Text(
-                          AppLocalizations.of(context)!.madeBy,
-                          style: const TextStyle(fontSize: 12),
+                        child: const Text(
+                          'Made with ❤️ by Black Hole',
+                          style: TextStyle(fontSize: 12),
                           textAlign: TextAlign.center,
                         ),
                       ),

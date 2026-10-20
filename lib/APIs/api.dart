@@ -383,24 +383,55 @@ class SaavnAPI {
     required String stationType,
     String? language,
   }) async {
-    String? params;
-    if (stationType == 'featured') {
-      params =
-          "name=${names[0]}&language=$language&${endpoints['featuredRadio']}";
-    }
-    if (stationType == 'artist') {
-      params =
-          "name=${names[0]}&query=${names[0]}&language=$language&${endpoints['artistRadio']}";
-    }
-    if (stationType == 'entity') {
-      params =
-          'entity_id=${names.map((e) => '"$e"').toList()}&entity_type=queue&${endpoints["entityRadio"]}';
-    }
+    try {
+      if (names.isEmpty || names[0].trim().isEmpty) return null;
+      final rawName = names[0].trim();
+      final encodedName = Uri.encodeComponent(rawName);
 
-    final res = await getResponse(params!);
-    if (res.statusCode == 200) {
-      final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
-      return getMain['stationid']?.toString();
+      String? activeLang = (language != null && language.trim().isNotEmpty)
+          ? language.trim().toLowerCase()
+          : null;
+      if (activeLang == null) {
+        if (Hive.isBoxOpen('settings')) {
+          final List preferred = Hive.box('settings')
+              .get('preferredLanguage', defaultValue: ['Hindi']) as List;
+          if (preferred.isNotEmpty) {
+            activeLang = preferred.first.toString().trim().toLowerCase();
+          }
+        }
+      }
+      activeLang ??= 'hindi';
+
+      String params;
+      if (stationType == 'featured') {
+        params =
+            "name=$encodedName&language=$activeLang&${endpoints['featuredRadio']}";
+      } else if (stationType == 'artist') {
+        params =
+            "name=$encodedName&query=$encodedName&language=$activeLang&${endpoints['artistRadio']}";
+      } else if (stationType == 'entity') {
+        final encodedList =
+            names.map((e) => '"${Uri.encodeComponent(e)}"').toList();
+        params =
+            'entity_id=$encodedList&entity_type=queue&${endpoints["entityRadio"]}';
+      } else {
+        params =
+            "name=$encodedName&query=$encodedName&language=$activeLang&${endpoints['featuredRadio']}";
+      }
+
+      final res = await getResponse(params);
+      if (res.statusCode == 200) {
+        final decoded = json.decode(utf8.decode(res.bodyBytes));
+        if (decoded is Map) {
+          final stationId =
+              decoded['stationid'] ?? decoded['station_id'] ?? decoded['id'];
+          if (stationId != null && stationId.toString().trim().isNotEmpty) {
+            return stationId.toString().trim();
+          }
+        }
+      }
+    } catch (e) {
+      Logger.root.severe('Error inside createRadio: $e');
     }
     return null;
   }
@@ -410,19 +441,37 @@ class SaavnAPI {
     int count = 20,
     int next = 1,
   }) async {
-    if (count > 0) {
+    try {
+      final cleanStationId = stationId.trim();
+      if (cleanStationId.isEmpty || count <= 0) return [];
+      final encodedStationId = Uri.encodeComponent(cleanStationId);
       final String params =
-          "stationid=$stationId&k=$count&next=$next&${endpoints['radioSongs']}";
+          "stationid=$encodedStationId&k=$count&next=$next&${endpoints['radioSongs']}";
       final res = await getResponse(params);
       if (res.statusCode == 200) {
-        final Map getMain = json.decode(utf8.decode(res.bodyBytes)) as Map;
+        final decoded = json.decode(utf8.decode(res.bodyBytes));
         final List responseList = [];
-        for (int i = 0; i < count; i++) {
-          responseList.add(getMain[i.toString()]['song']);
+        if (decoded is Map) {
+          for (int i = 0; i < count; i++) {
+            final entry = decoded[i.toString()];
+            if (entry is Map && entry['song'] != null && entry['song'] is Map) {
+              responseList.add(entry['song']);
+            }
+          }
+          if (responseList.isEmpty) {
+            decoded.forEach((key, val) {
+              if (val is Map && val['song'] != null && val['song'] is Map) {
+                responseList.add(val['song']);
+              }
+            });
+          }
+          return await FormatResponse.formatSongsResponse(responseList, 'song');
+        } else if (decoded is List) {
+          return await FormatResponse.formatSongsResponse(decoded, 'song');
         }
-        return FormatResponse.formatSongsResponse(responseList, 'song');
       }
-      return [];
+    } catch (e) {
+      Logger.root.severe('Error inside getRadioSongs: $e');
     }
     return [];
   }

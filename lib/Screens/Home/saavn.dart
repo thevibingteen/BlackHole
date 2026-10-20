@@ -469,8 +469,14 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                       );
               }
               final listKey = lists[idx].toString();
-              final isRadio = data['modules']?[listKey]?['title']?.toString() ==
-                  'Radio Stations';
+              final isRadio = listKey == 'radio' ||
+                  data['modules']?[listKey]?['title']?.toString() ==
+                      'Radio Stations' ||
+                  (data['modules']?[listKey]?['title']
+                          ?.toString()
+                          .toLowerCase()
+                          .contains('radio') ??
+                      false);
               final moduleData = data[listKey];
               final isEffectivelyEmpty = moduleData == null ||
                   (moduleData is List &&
@@ -613,10 +619,17 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                               if (isRadio) {
                                 index < likedRadio.length
                                     ? item = likedRadio[index] as Map
-                                    : item = (moduleData as List)
-                                        [index - likedRadio.length] as Map;
+                                    : item = (moduleData is List &&
+                                            index - likedRadio.length <
+                                                moduleData.length)
+                                        ? (moduleData)[
+                                            index - likedRadio.length] as Map
+                                        : {};
                               } else {
-                                item = (moduleData as List)[index] as Map;
+                                item = (moduleData is List &&
+                                        index < moduleData.length)
+                                    ? moduleData[index] as Map
+                                    : {};
                               }
                               final currentSongList = (moduleData is List)
                                   ? moduleData
@@ -700,7 +713,7 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                     },
                                   );
                                 },
-                                onTap: () {
+                                onTap: () async {
                                   if (item['type'] == 'radio_station') {
                                     ShowSnackBar().showSnackBar(
                                       context,
@@ -708,42 +721,92 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                           .connectingRadio,
                                       duration: const Duration(seconds: 2),
                                     );
-                                    SaavnAPI()
-                                        .createRadio(
-                                      names: item['more_info']
-                                                      ['featured_station_type']
-                                                  .toString() ==
-                                              'artist'
-                                          ? [
-                                              item['more_info']['query']
-                                                  .toString()
-                                            ]
-                                          : [item['id'].toString()],
-                                      language: item['more_info']['language']
+                                    try {
+                                      final stationType = item['more_info']
+                                                  ?['featured_station_type']
                                               ?.toString() ??
-                                          'hindi',
-                                      stationType: item['more_info']
-                                              ['featured_station_type']
-                                          .toString(),
-                                    )
-                                        .then((value) {
-                                      if (value != null) {
-                                        SaavnAPI()
-                                            .getRadioSongs(stationId: value)
-                                            .then((value) {
+                                          'featured';
+                                      final stationName = stationType ==
+                                              'artist'
+                                          ? (item['more_info']?['query']
+                                                      ?.toString()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? item['more_info']['query']
+                                                  .toString()
+                                              : (item['title']
+                                                          ?.toString()
+                                                          .isNotEmpty ==
+                                                      true
+                                                  ? item['title'].toString()
+                                                  : item['name']
+                                                          ?.toString() ??
+                                                      ''))
+                                          : (item['id']
+                                                      ?.toString()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? item['id'].toString()
+                                              : (item['title']
+                                                          ?.toString()
+                                                          .isNotEmpty ==
+                                                      true
+                                                  ? item['title'].toString()
+                                                  : item['name']
+                                                          ?.toString() ??
+                                                      ''));
+                                      final lang = item['more_info']
+                                              ?['language']
+                                          ?.toString();
+
+                                      final stationId =
+                                          await SaavnAPI().createRadio(
+                                        names: [stationName],
+                                        language: lang,
+                                        stationType: stationType,
+                                      );
+                                      if (stationId != null &&
+                                          stationId.isNotEmpty) {
+                                        final songs = await SaavnAPI()
+                                            .getRadioSongs(
+                                                stationId: stationId);
+                                        if (songs.isNotEmpty) {
                                           PlayerInvoke.init(
-                                            songsList: value,
+                                            songsList: songs,
                                             index: 0,
                                             isOffline: false,
                                             shuffle: true,
                                           );
-                                          Navigator.pushNamed(
+                                          if (context.mounted) {
+                                            Navigator.pushNamed(
+                                              context,
+                                              '/player',
+                                            );
+                                          }
+                                        } else {
+                                          if (context.mounted) {
+                                            ShowSnackBar().showSnackBar(
+                                              context,
+                                              'Failed to connect to Radio',
+                                            );
+                                          }
+                                        }
+                                      } else {
+                                        if (context.mounted) {
+                                          ShowSnackBar().showSnackBar(
                                             context,
-                                            '/player',
+                                            'Failed to connect to Radio',
                                           );
-                                        });
+                                        }
                                       }
-                                    });
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ShowSnackBar().showSnackBar(
+                                          context,
+                                          'Failed to connect to Radio',
+                                        );
+                                      }
+                                    }
                                   } else {
                                     if (item['type'] == 'song') {
                                       PlayerInvoke.init(

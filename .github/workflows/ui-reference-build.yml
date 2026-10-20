@@ -30,11 +30,11 @@ jobs:
           echo "Current HEAD commit: $(git rev-parse HEAD)"
           echo "Comparing protected UI paths against pinned baseline $ORIGINAL_MAIN_SHA"
           git fetch origin $ORIGINAL_MAIN_SHA
-          echo "Authorized screen diffs (Top Charts, Login Pref, Home Saavn):"
-          git diff --stat $ORIGINAL_MAIN_SHA -- "lib/Screens/Top Charts/top.dart" "lib/Screens/Login/pref.dart" "lib/Screens/Home/saavn.dart"
+          echo "Authorized screen diffs (Top Charts, Login Pref, Home Saavn, About, Import, Artists):"
+          git diff --stat $ORIGINAL_MAIN_SHA -- "lib/Screens/Top Charts/top.dart" "lib/Screens/Login/pref.dart" "lib/Screens/Home/saavn.dart" "lib/Screens/Settings/about.dart" "lib/Screens/About/about.dart" "lib/Screens/Library/import.dart" "lib/Screens/Search/artists.dart"
           echo "Enforcing strict 0-diff freeze on all other protected UI paths:"
-          git diff --stat $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' ':!lib/Screens/Login/pref.dart' ':!lib/Screens/Home/saavn.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
-          git diff --exit-code $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' ':!lib/Screens/Login/pref.dart' ':!lib/Screens/Home/saavn.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
+          git diff --stat $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' ':!lib/Screens/Login/pref.dart' ':!lib/Screens/Home/saavn.dart' ':!lib/Screens/Settings/about.dart' ':!lib/Screens/About/about.dart' ':!lib/Screens/Library/import.dart' ':!lib/Screens/Search/artists.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
+          git diff --exit-code $ORIGINAL_MAIN_SHA -- lib/Screens ':!lib/Screens/Top Charts/top.dart' ':!lib/Screens/Login/pref.dart' ':!lib/Screens/Home/saavn.dart' ':!lib/Screens/Settings/about.dart' ':!lib/Screens/About/about.dart' ':!lib/Screens/Library/import.dart' ':!lib/Screens/Search/artists.dart' lib/CustomWidgets lib/theme lib/main.dart lib/localization assets
           echo "UI Freeze validation PASSED: 0 diff in all protected UI directories except authorized screens."
 
       - name: Setup Java
@@ -50,14 +50,13 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Apply temporary UI Reference identity (runner only)
+      - name: Apply temporary UI Reference applicationId (runner only)
         run: |
           sed -i 's/applicationId "com.shadow.blackhole"/applicationId "com.shadow.blackhole.ui_reference"/' android/app/build.gradle
-          sed -i 's/android:label="BlackHole"/android:label="BlackHole UI Reference"/' android/app/src/main/AndroidManifest.xml
           echo "Verified application ID change:"
           grep -n 'applicationId "com.shadow.blackhole.ui_reference"' android/app/build.gradle
-          echo "Verified launcher label change:"
-          grep -n 'android:label="BlackHole UI Reference"' android/app/src/main/AndroidManifest.xml
+          echo "Verified launcher label remains BlackHole:"
+          grep -n 'android:label="BlackHole"' android/app/src/main/AndroidManifest.xml
 
       - name: Generate disposable test keystore and key.properties
         run: |

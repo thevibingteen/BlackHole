@@ -151,7 +151,26 @@ Future<List> importFilePlaylist(
 
     final File file = File(temp);
     final String finString = await file.readAsString();
-    final Map songsMap = json.decode(finString) as Map;
+    if (finString.trim().isEmpty) {
+      if (context != null) {
+        ShowSnackBar().showSnackBar(
+          context,
+          AppLocalizations.of(context)!.failedImport,
+        );
+      }
+      return playlistNames;
+    }
+    final dynamic decoded = json.decode(finString);
+    if (decoded is! Map || decoded.isEmpty) {
+      if (context != null) {
+        ShowSnackBar().showSnackBar(
+          context,
+          AppLocalizations.of(context)!.failedImport,
+        );
+      }
+      return playlistNames;
+    }
+    final Map songsMap = decoded;
     final List songs = songsMap.values.toList();
     // playlistBox.put(mediaItem.id.toString(), info);
     // Hive.box(play)
@@ -159,8 +178,12 @@ Future<List> importFilePlaylist(
     if (playlistName.trim() == '') {
       playlistName = 'Playlist ${playlistNames.length}';
     }
-    if (playlistNames.contains(playlistName)) {
-      playlistName = '$playlistName (1)';
+    final String baseName = playlistName;
+    int count = 1;
+    while (playlistNames.contains(playlistName) ||
+        await Hive.boxExists(playlistName)) {
+      playlistName = '$baseName ($count)';
+      count++;
     }
     playlistNames.add(playlistName);
 

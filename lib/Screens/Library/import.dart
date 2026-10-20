@@ -79,10 +79,7 @@ class ImportPlaylist extends StatelessWidget {
                                           context,
                                         )!
                                           .importJioSaavn
-                                      : AppLocalizations.of(
-                                          context,
-                                        )!
-                                          .importResso,
+                                      : 'Import from Deezer',
                     ),
                     leading: SizedBox.square(
                       dimension: 50,
@@ -94,7 +91,9 @@ class ImportPlaylist extends StatelessWidget {
                                   ? MdiIcons.spotify
                                   : index == 2
                                       ? MdiIcons.youtube
-                                      : Icons.music_note_rounded,
+                                      : index == 3
+                                          ? Icons.music_note_rounded
+                                          : Icons.album_rounded,
                           color: Theme.of(context).iconTheme.color,
                         ),
                       ),
@@ -124,7 +123,7 @@ class ImportPlaylist extends StatelessWidget {
                                           playlistNames,
                                           settingsBox,
                                         )
-                                      : importResso(
+                                      : importDeezer(
                                           cntxt,
                                           playlistNames,
                                           settingsBox,
@@ -226,37 +225,48 @@ Future<void> importYt(
             duration: const Duration(seconds: 3),
           );
         } else {
-          playlistNames.add(
-            data['title'] == '' ? 'Yt Playlist' : data['title'],
-          );
+          final String baseName =
+              data['title'] == '' ? 'Yt Playlist' : data['title'].toString();
+          String playName = baseName;
+          int count = 1;
+          while (playlistNames.contains(playName) ||
+              await Hive.boxExists(playName)) {
+            playName = '$baseName ($count)';
+            count++;
+          }
+          playlistNames.add(playName);
           settingsBox.put(
             'playlistNames',
             playlistNames,
           );
 
-          await SearchAddPlaylist.showProgress(
-            data['count'] as int,
-            context,
-            SearchAddPlaylist.ytSongsAdder(
-              data['title'].toString(),
-              data['tracks'] as List,
-            ),
-          );
+          if (context.mounted) {
+            await SearchAddPlaylist.showProgress(
+              data['count'] as int,
+              context,
+              SearchAddPlaylist.ytSongsAdder(
+                playName,
+                data['tracks'] as List,
+              ),
+            );
+          }
         }
       } else {
         Logger.root.severe(
           'Failed to import YT playlist. Data is empty.',
         );
-        ShowSnackBar().showSnackBar(
-          context,
-          AppLocalizations.of(context)!.failedImport,
-        );
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            AppLocalizations.of(context)!.failedImport,
+          );
+        }
       }
     },
   );
 }
 
-Future<void> importResso(
+Future<void> importDeezer(
   BuildContext context,
   List playlistNames,
   Box settingsBox,
@@ -269,13 +279,16 @@ Future<void> importResso(
     onSubmitted: (value) async {
       final String link = value.trim();
       Navigator.pop(context);
-      final Map data = await SearchAddPlaylist.addRessoPlaylist(link);
+      final Map data = await SearchAddPlaylist.addDeezerPlaylist(link);
       if (data.isNotEmpty) {
-        String playName = data['title'].toString();
+        final String baseName =
+            data['title'] == '' ? 'Deezer Playlist' : data['title'].toString();
+        String playName = baseName;
+        int count = 1;
         while (playlistNames.contains(playName) ||
             await Hive.boxExists(playName)) {
-          // ignore: use_string_buffers
-          playName = '$playName (1)';
+          playName = '$baseName ($count)';
+          count++;
         }
         playlistNames.add(playName);
         settingsBox.put(
@@ -283,25 +296,37 @@ Future<void> importResso(
           playlistNames,
         );
 
-        await SearchAddPlaylist.showProgress(
-          data['count'] as int,
-          context,
-          SearchAddPlaylist.ressoSongsAdder(
-            playName,
-            data['tracks'] as List,
-          ),
-        );
+        if (context.mounted) {
+          await SearchAddPlaylist.showProgress(
+            data['count'] as int,
+            context,
+            SearchAddPlaylist.deezerSongsAdder(
+              playName,
+              data['tracks'] as List,
+            ),
+          );
+        }
       } else {
         Logger.root.severe(
-          'Failed to import Resso playlist. Data is empty.',
+          'Failed to import Deezer playlist. Data is empty.',
         );
-        ShowSnackBar().showSnackBar(
-          context,
-          AppLocalizations.of(context)!.failedImport,
-        );
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            AppLocalizations.of(context)!.failedImport,
+          );
+        }
       }
     },
   );
+}
+
+Future<void> importResso(
+  BuildContext context,
+  List playlistNames,
+  Box settingsBox,
+) async {
+  await importDeezer(context, playlistNames, settingsBox);
 }
 
 Future<void> importSpotify(
@@ -318,10 +343,12 @@ Future<void> importSpotify(
     playlistId,
   );
   if (data.isNotEmpty) {
-    String playName = data['title'].toString();
+    final String baseName = data['title'].toString();
+    String playName = baseName;
+    int count = 1;
     while (playlistNames.contains(playName) || await Hive.boxExists(playName)) {
-      // ignore: use_string_buffers
-      playName = '$playName (1)';
+      playName = '$baseName ($count)';
+      count++;
     }
     playlistNames.add(playName);
     settingsBox.put(
@@ -329,22 +356,26 @@ Future<void> importSpotify(
       playlistNames,
     );
 
-    await SearchAddPlaylist.showProgress(
-      data['count'] as int,
-      context,
-      SearchAddPlaylist.spotifySongsAdder(
-        playName,
-        data['tracks'] as List,
-      ),
-    );
+    if (context.mounted) {
+      await SearchAddPlaylist.showProgress(
+        data['count'] as int,
+        context,
+        SearchAddPlaylist.spotifySongsAdder(
+          playName,
+          data['tracks'] as List,
+        ),
+      );
+    }
   } else {
     Logger.root.severe(
       'Failed to import Spotify playlist. Data is empty.',
     );
-    ShowSnackBar().showSnackBar(
-      context,
-      AppLocalizations.of(context)!.failedImport,
-    );
+    if (context.mounted) {
+      ShowSnackBar().showSnackBar(
+        context,
+        AppLocalizations.of(context)!.failedImport,
+      );
+    }
   }
 }
 
@@ -392,16 +423,36 @@ Future<void> importJioSaavn(
         link,
       );
 
-      if (data.isNotEmpty) {
-        final String playName = data['title'].toString();
+      if (data.isNotEmpty && data['tracks'] is List) {
+        final String baseName =
+            data['title']?.toString() ?? 'JioSaavn Playlist';
+        String playName = baseName;
+        int count = 1;
+        while (playlistNames.contains(playName) ||
+            await Hive.boxExists(playName)) {
+          playName = '$baseName ($count)';
+          count++;
+        }
         addPlaylist(playName, data['tracks'] as List);
         playlistNames.add(playName);
+        settingsBox.put(
+          'playlistNames',
+          playlistNames,
+        );
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            '${AppLocalizations.of(context)!.importSuccess} "$playName"',
+          );
+        }
       } else {
         Logger.root.severe('Failed to import JioSaavn playlist. data is empty');
-        ShowSnackBar().showSnackBar(
-          context,
-          AppLocalizations.of(context)!.failedImport,
-        );
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            AppLocalizations.of(context)!.failedImport,
+          );
+        }
       }
     },
   );
