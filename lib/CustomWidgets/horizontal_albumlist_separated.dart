@@ -117,6 +117,10 @@ class HorizontalAlbumsListSeparated extends StatelessWidget {
                         dimension: 55.0,
                         child: CachedNetworkImage(
                           fit: BoxFit.cover,
+                          memCacheWidth: 150,
+                          memCacheHeight: 150,
+                          maxWidthDiskCache: 300,
+                          maxHeightDiskCache: 300,
                           errorWidget: (context, _, __) => const Image(
                             fit: BoxFit.cover,
                             image: AssetImage('assets/cover.jpg'),

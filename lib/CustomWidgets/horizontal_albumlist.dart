@@ -153,6 +153,10 @@ class HorizontalAlbumsList extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: CachedNetworkImage(
                     fit: BoxFit.cover,
+                    memCacheWidth: 250,
+                    memCacheHeight: 250,
+                    maxWidthDiskCache: 500,
+                    maxHeightDiskCache: 500,
                     errorWidget: (context, _, __) => const Image(
                       fit: BoxFit.cover,
                       image: AssetImage('assets/cover.jpg'),

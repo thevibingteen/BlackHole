@@ -97,7 +97,7 @@ class _SettingPageState extends State<SettingPage>
   bool useProxy =
       Hive.box('settings').get('useProxy', defaultValue: false) as bool;
   String themeColor =
-      Hive.box('settings').get('themeColor', defaultValue: 'Teal') as String;
+      Hive.box('settings').get('themeColor', defaultValue: 'Purple') as String;
   int colorHue = Hive.box('settings').get('colorHue', defaultValue: 400) as int;
   int downFilename =
       Hive.box('settings').get('downFilename', defaultValue: 0) as int;
@@ -1027,7 +1027,7 @@ class _SettingPageState extends State<SettingPage>
                                         : selectedTheme['cardColor'] as String;
 
                                     themeColor = themeChoice == deflt
-                                        ? 'Teal'
+                                        ? 'Purple'
                                         : selectedTheme['accentColor']
                                             as String;
                                     colorHue = themeChoice == deflt

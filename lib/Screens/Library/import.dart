@@ -392,7 +392,17 @@ Future<void> importSpotifyViaLink(
     keyboardType: TextInputType.url,
     onSubmitted: (String value) async {
       Navigator.pop(context);
-      final String playlistId = value.split('?')[0].split('/').last;
+      final String? playlistId =
+          SearchAddPlaylist.parseSpotifyPlaylistId(value);
+      if (playlistId == null || playlistId.isEmpty) {
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            AppLocalizations.of(context)!.failedImport,
+          );
+        }
+        return;
+      }
       final playlistName = AppLocalizations.of(context)!.spotifyPublic;
       await importSpotify(
         context,
@@ -433,12 +443,12 @@ Future<void> importJioSaavn(
           playName = '$baseName ($count)';
           count++;
         }
-        addPlaylist(playName, data['tracks'] as List);
-        playlistNames.add(playName);
-        settingsBox.put(
-          'playlistNames',
-          playlistNames,
-        );
+        await addPlaylist(playName, data['tracks'] as List);
+        final updatedPlaylists =
+            Hive.box('settings').get('playlistNames') as List? ?? playlistNames;
+        playlistNames
+          ..clear()
+          ..addAll(updatedPlaylists);
         if (context.mounted) {
           ShowSnackBar().showSnackBar(
             context,

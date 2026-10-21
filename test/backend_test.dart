@@ -1,9 +1,10 @@
-import 'package:blackhole/Helpers/app_links.dart';
+import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/APIs/spotify_api.dart';
+import 'package:blackhole/Helpers/app_links.dart';
+import 'package:blackhole/Helpers/config.dart';
 import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/github.dart';
 import 'package:blackhole/Helpers/image_resolution_modifier.dart';
@@ -13,8 +14,10 @@ import 'package:blackhole/Helpers/search_add_playlist.dart';
 import 'package:blackhole/Helpers/update.dart';
 import 'package:blackhole/Services/youtube_services.dart';
 import 'package:blackhole/Services/yt_music.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'dart:convert';
+import 'package:hive/hive.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   group('Lyrics Backend & HTML Rejection Tests', () {
@@ -22,38 +25,52 @@ void main() {
         'isHtmlOrChallenge should detect HTML doctype, tags, and challenge pages',
         () {
       expect(
-          Lyrics.isHtmlOrChallenge(
-              '<!DOCTYPE html><html><body>Error</body></html>'),
-          isTrue);
+        Lyrics.isHtmlOrChallenge(
+          '<!DOCTYPE html><html><body>Error</body></html>',
+        ),
+        isTrue,
+      );
       expect(
-          Lyrics.isHtmlOrChallenge(
-              '<html lang="en"><head><script src="bot.js"></script></head>'),
-          isTrue);
+        Lyrics.isHtmlOrChallenge(
+          '<html lang="en"><head><script src="bot.js"></script></head>',
+        ),
+        isTrue,
+      );
       expect(
-          Lyrics.isHtmlOrChallenge(
-              'Please complete the captcha below: <div><span class="captcha">'),
-          isTrue);
+        Lyrics.isHtmlOrChallenge(
+          'Please complete the captcha below: <div><span class="captcha">',
+        ),
+        isTrue,
+      );
       expect(
-          Lyrics.isHtmlOrChallenge(
-              'Enable JavaScript to continue to Google Search'),
-          isTrue);
+        Lyrics.isHtmlOrChallenge(
+          'Enable JavaScript to continue to Google Search',
+        ),
+        isTrue,
+      );
       expect(
-          Lyrics.isHtmlOrChallenge(
-              '<div class="BNeawe">Some scraped text</div>'),
-          isTrue);
+        Lyrics.isHtmlOrChallenge(
+          '<div class="BNeawe">Some scraped text</div>',
+        ),
+        isTrue,
+      );
     });
 
     test(
         'isHtmlOrChallenge should allow clean plain lyrics and synced LRC lyrics',
         () {
       expect(
-          Lyrics.isHtmlOrChallenge(
-              'Look at the stars\nLook how they shine for you'),
-          isFalse);
+        Lyrics.isHtmlOrChallenge(
+          'Look at the stars\nLook how they shine for you',
+        ),
+        isFalse,
+      );
       expect(
-          Lyrics.isHtmlOrChallenge(
-              '[00:35.66] Look at the stars\n[00:38.46] Look how they shine for you'),
-          isFalse);
+        Lyrics.isHtmlOrChallenge(
+          '[00:35.66] Look at the stars\n[00:38.46] Look how they shine for you',
+        ),
+        isFalse,
+      );
       expect(Lyrics.isHtmlOrChallenge(''), isFalse);
     });
 
@@ -77,7 +94,9 @@ void main() {
       expect(formatted, isA<Map>());
       expect(formatted['collections'], isA<List>());
       expect(
-          (formatted['collections'] as List).contains('new_trending'), isTrue);
+        (formatted['collections'] as List).contains('new_trending'),
+        isTrue,
+      );
     });
 
     test('formatHomePageData safely formats modules with items', () async {
@@ -87,7 +106,7 @@ void main() {
             'title': 'Top Playlists',
             'subtitle': 'Trending today',
             'position': '1',
-          }
+          },
         },
         'top_playlists': [
           {
@@ -98,15 +117,19 @@ void main() {
             'image': 'https://c.saavncdn.com/test.jpg',
             'perma_url': 'https://jiosaavn.com/p/12345',
           }
-        ]
+        ],
       };
       final formatted = await FormatResponse.formatHomePageData(input);
       expect(formatted['collections'], isA<List>());
       expect(
-          (formatted['collections'] as List).contains('top_playlists'), isTrue);
+        (formatted['collections'] as List).contains('top_playlists'),
+        isTrue,
+      );
       expect(formatted['top_playlists'], isA<List>());
-      expect((formatted['top_playlists'] as List).first['title'],
-          equals('Top Hindi Hits'));
+      expect(
+        (formatted['top_playlists'] as List).first['title'],
+        equals('Top Hindi Hits'),
+      );
     });
 
     test('formatSingleSongResponse sets valid media URLs and formats metadata',
@@ -147,12 +170,12 @@ void main() {
                       'navigationEndpoint': {
                         'watchEndpoint': {
                           'videoId': 'vid_muskan_123',
-                        }
-                      }
+                        },
+                      },
                     }
-                  ]
-                }
-              }
+                  ],
+                },
+              },
             },
             {
               'musicResponsiveListItemFlexColumnRenderer': {
@@ -164,22 +187,22 @@ void main() {
                     {'text': ' • '},
                     {'text': 'Album Name'},
                     {'text': ' • '},
-                    {'text': '3:45'}
-                  ]
-                }
-              }
+                    {'text': '3:45'},
+                  ],
+                },
+              },
             }
           ],
           'thumbnail': {
             'musicThumbnailRenderer': {
               'thumbnail': {
                 'thumbnails': [
-                  {'url': 'https://lh3.googleusercontent.com/test=w120-h120'}
-                ]
-              }
-            }
-          }
-        }
+                  {'url': 'https://lh3.googleusercontent.com/test=w120-h120'},
+                ],
+              },
+            },
+          },
+        },
       };
 
       final parsed = service.parseResponsiveListItem(
@@ -197,8 +220,8 @@ void main() {
 
   group('Spotify PKCE Tests', () {
     test('generateCodeVerifier creates high-entropy URL-safe string', () {
-      final verifier1 = SpotifyApi.generateCodeVerifier(64);
-      final verifier2 = SpotifyApi.generateCodeVerifier(64);
+      final verifier1 = SpotifyApi.generateCodeVerifier();
+      final verifier2 = SpotifyApi.generateCodeVerifier();
       expect(verifier1.length, equals(64));
       expect(verifier2.length, equals(64));
       expect(verifier1, isNot(equals(verifier2)));
@@ -267,7 +290,9 @@ void main() {
       final decoded = jsonDecode(utf8.decode(encodedBytes)) as Map;
       expect(decoded['syncedLyrics'], equals(syncedHindi));
       expect(
-          Lyrics.isHtmlOrChallenge(decoded['syncedLyrics'] as String), isFalse);
+        Lyrics.isHtmlOrChallenge(decoded['syncedLyrics'] as String),
+        isFalse,
+      );
     });
   });
 
@@ -281,8 +306,10 @@ void main() {
 
       // Buggy baseline Uri.https:
       final buggyUri = Uri.https(baseUrl, '$apiStr&$params');
-      expect(buggyUri.path.contains('%3F'),
-          isTrue); // Broken! %3F causes 403 Forbidden!
+      expect(
+        buggyUri.path.contains('%3F'),
+        isTrue,
+      ); // Broken! %3F causes 403 Forbidden!
       expect(buggyUri.query, isEmpty);
 
       // Fixed Uri.parse:
@@ -290,7 +317,9 @@ void main() {
       expect(fixedUri.path, equals('/api.php')); // Clean path!
       expect(fixedUri.queryParameters['_format'], equals('json'));
       expect(
-          fixedUri.queryParameters['__call'], equals('webapi.getLaunchData'));
+        fixedUri.queryParameters['__call'],
+        equals('webapi.getLaunchData'),
+      );
       expect(fixedUri.toString().contains('%3F'), isFalse);
     });
   });
@@ -322,7 +351,7 @@ void main() {
                                           'metadata': {
                                             'lockupMetadataViewModel': {
                                               'title': {
-                                                'content': 'Bollywood Hitlist'
+                                                'content': 'Bollywood Hitlist',
                                               },
                                               'metadata': {
                                                 'contentMetadataViewModel': {
@@ -332,15 +361,15 @@ void main() {
                                                         {
                                                           'text': {
                                                             'content':
-                                                                'Top Trending Bollywood'
-                                                          }
+                                                                'Top Trending Bollywood',
+                                                          },
                                                         }
-                                                      ]
+                                                      ],
                                                     }
-                                                  ]
-                                                }
-                                              }
-                                            }
+                                                  ],
+                                                },
+                                              },
+                                            },
                                           },
                                           'contentImage': {
                                             'thumbnailViewModel': {
@@ -348,43 +377,44 @@ void main() {
                                                 'sources': [
                                                   {
                                                     'url':
-                                                        'https://i.ytimg.com/vi/test/hqdefault.jpg'
+                                                        'https://i.ytimg.com/vi/test/hqdefault.jpg',
                                                   }
-                                                ]
-                                              }
-                                            }
+                                                ],
+                                              },
+                                            },
                                           },
                                           'rendererContext': {
                                             'commandContext': {
                                               'onTap': {
                                                 'innertubeCommand': {
                                                   'watchPlaylistEndpoint': {
-                                                    'playlistId': 'PL1234567890'
+                                                    'playlistId':
+                                                        'PL1234567890',
                                                   },
                                                   'watchEndpoint': {
-                                                    'videoId': 'vid_first_123'
-                                                  }
-                                                }
-                                              }
-                                            }
-                                          }
-                                        }
-                                      }
-                                    }
+                                                    'videoId': 'vid_first_123',
+                                                  },
+                                                },
+                                              },
+                                            },
+                                          },
+                                        },
+                                      },
+                                    },
                                   }
-                                ]
-                              }
-                            }
-                          }
+                                ],
+                              },
+                            },
+                          },
                         }
-                      ]
-                    }
-                  }
-                }
+                      ],
+                    },
+                  },
+                },
               }
-            ]
-          }
-        }
+            ],
+          },
+        },
       };
 
       final tabs =
@@ -426,12 +456,18 @@ void main() {
 
       expect(shelves.length, equals(1));
       expect(shelves.first['title'], equals("India's Biggest Hits"));
-      expect((shelves.first['playlists'] as List).first['title'],
-          equals('Bollywood Hitlist'));
-      expect((shelves.first['playlists'] as List).first['playlistId'],
-          equals('PL1234567890'));
-      expect((shelves.first['playlists'] as List).first['firstItemId'],
-          equals('vid_first_123'));
+      expect(
+        (shelves.first['playlists'] as List).first['title'],
+        equals('Bollywood Hitlist'),
+      );
+      expect(
+        (shelves.first['playlists'] as List).first['playlistId'],
+        equals('PL1234567890'),
+      );
+      expect(
+        (shelves.first['playlists'] as List).first['firstItemId'],
+        equals('vid_first_123'),
+      );
     });
   });
 
@@ -447,17 +483,17 @@ void main() {
               'images': [
                 {'url': 'https://i.scdn.co/image/big.jpg'},
                 {'url': 'https://i.scdn.co/image/small.jpg'},
-              ]
+              ],
             },
             'artists': [
-              {'name': 'Artist A'}
+              {'name': 'Artist A'},
             ],
-            'external_urls': {'spotify': 'https://open.spotify.com/track/123'}
-          }
+            'external_urls': {'spotify': 'https://open.spotify.com/track/123'},
+          },
         },
         {
           // Unavailable track with null track property
-          'track': null
+          'track': null,
         },
         {
           // Episode/podcast with null album images
@@ -465,9 +501,9 @@ void main() {
             'name': 'Podcast Episode',
             'album': {'images': []},
             'artists': [
-              {'name': 'Host'}
-            ]
-          }
+              {'name': 'Host'},
+            ],
+          },
         }
       ];
 
@@ -493,7 +529,7 @@ void main() {
     test('extracts expire timestamp from signed stream URL correctly', () {
       const sampleUrl =
           'https://rr4---sn-5hnekne6.googlevideo.com/videoplayback?expire=1760720400&ei=abcd&ip=1.2.3.4&id=o-ABCD&itag=140';
-      final match = RegExp(r'expire=([0-9]+)').firstMatch(sampleUrl);
+      final match = RegExp('expire=([0-9]+)').firstMatch(sampleUrl);
       expect(match, isNotNull);
       expect(match!.group(1), equals('1760720400'));
       final int expireTimestamp = int.parse(match.group(1)!);
@@ -505,7 +541,7 @@ void main() {
           (DateTime.now().millisecondsSinceEpoch ~/ 1000) - 300;
       final String pastUrl =
           'https://googlevideo.com/videoplayback?expire=$pastExpire&id=123';
-      final match = RegExp(r'expire=([0-9]+)').firstMatch(pastUrl);
+      final match = RegExp('expire=([0-9]+)').firstMatch(pastUrl);
       expect(match, isNotNull);
       final int expireTime = int.parse(match!.group(1)!);
       final bool isExpired =
@@ -517,7 +553,7 @@ void main() {
         'handles URLs without expire parameter safely without throwing exceptions',
         () {
       const urlWithoutExpire = 'https://example.com/stream.mp4';
-      final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithoutExpire);
+      final match = RegExp('expire=([0-9]+)').firstMatch(urlWithoutExpire);
       expect(match, isNull);
     });
   });
@@ -584,7 +620,7 @@ void main() {
       final malformedItem = {
         'musicResponsiveListItemRenderer': {
           'flexColumns': <dynamic>[],
-        }
+        },
       };
       final result = service.parseResponsiveListItem(malformedItem);
       expect(result, isNull);
@@ -599,11 +635,11 @@ void main() {
           'flexColumns': [
             {
               'musicResponsiveListItemFlexColumnRenderer': {
-                'text': {'runs': <dynamic>[]}
-              }
+                'text': {'runs': <dynamic>[]},
+              },
             }
-          ]
-        }
+          ],
+        },
       };
       final result = service.parseResponsiveListItem(malformedItem);
       expect(result, isNull);
@@ -660,7 +696,10 @@ void main() {
 
   group('Download Quality & Bitrate Replacement Tests', () {
     String resolveDownloadUrl(
-        String rawUrl, String preferredQuality, bool has320) {
+      String rawUrl,
+      String preferredQuality,
+      bool has320,
+    ) {
       final String quality = (preferredQuality == '320 kbps' && !has320)
           ? '160'
           : preferredQuality.replaceAll(' kbps', '');
@@ -696,7 +735,7 @@ void main() {
         () {
       const urlWithExpire =
           'https://rr4---sn-ci5gup-c35e.googlevideo.com/videoplayback?expire=1776543210&ei=test&ip=1.2.3.4';
-      final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithExpire);
+      final match = RegExp('expire=([0-9]+)').firstMatch(urlWithExpire);
       expect(match, isNotNull);
       final int parsedExpire = int.tryParse(match!.group(1)!) ?? 0;
       expect(parsedExpire, equals(1776543210));
@@ -706,7 +745,7 @@ void main() {
         () {
       const urlWithoutExpire = 'https://example.com/audio.mp4';
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final match = RegExp(r'expire=([0-9]+)').firstMatch(urlWithoutExpire);
+      final match = RegExp('expire=([0-9]+)').firstMatch(urlWithoutExpire);
       final int parsedExpire = match != null
           ? (int.tryParse(match.group(1)!) ?? (now + 18000))
           : (now + 18000);
@@ -719,17 +758,17 @@ void main() {
 
       // 1. Valid cache: expires in 3600 seconds
       final int validExpiry = now + 3600;
-      final bool isValid = (now + 350 <= validExpiry);
+      final bool isValid = now + 350 <= validExpiry;
       expect(isValid, isTrue);
 
       // 2. Near-expiry cache: expires in 200 seconds (less than 350 threshold)
       final int nearExpiry = now + 200;
-      final bool isNearExpired = (now + 350 <= nearExpiry);
+      final bool isNearExpired = now + 350 <= nearExpiry;
       expect(isNearExpired, isFalse);
 
       // 3. Already expired cache
       final int expiredExpiry = now - 100;
-      final bool isExpired = (now + 350 <= expiredExpiry);
+      final bool isExpired = now + 350 <= expiredExpiry;
       expect(isExpired, isFalse);
     });
 
@@ -746,7 +785,9 @@ void main() {
       final String lowChoice = streams.first;
 
       expect(
-          highChoice, equals('https://stream.googlevideo.com/audio_high_160k'));
+        highChoice,
+        equals('https://stream.googlevideo.com/audio_high_160k'),
+      );
       expect(lowChoice, equals('https://stream.googlevideo.com/audio_low_48k'));
     });
 
@@ -866,12 +907,18 @@ void main() {
       normalized['spotifyUrl'] = normalized['perma_url'] ?? '';
 
       expect(normalized['name'], equals('Chaleya'));
-      expect(normalized['image_url_small'],
-          equals('https://c.saavncdn.com/123.jpg'));
-      expect(normalized['spotifyUrl'],
-          equals('https://jiosaavn.com/s/chaleya/123'));
       expect(
-          normalized['url'], equals('https://aac.saavncdn.com/123/audio.mp4'));
+        normalized['image_url_small'],
+        equals('https://c.saavncdn.com/123.jpg'),
+      );
+      expect(
+        normalized['spotifyUrl'],
+        equals('https://jiosaavn.com/s/chaleya/123'),
+      );
+      expect(
+        normalized['url'],
+        equals('https://aac.saavncdn.com/123/audio.mp4'),
+      );
     });
 
     test(
@@ -900,13 +947,13 @@ void main() {
               'url':
                   'https://stream.googlevideo.com/videoplayback?expire=1792445511&itag=140',
             }
-          ]
-        }
+          ],
+        },
       };
 
-      final formats = mockInnerTube['streamingData']!['formats'] as List;
+      final formats = mockInnerTube['streamingData']!['formats']! as List;
       final adaptiveFormats =
-          mockInnerTube['streamingData']!['adaptiveFormats'] as List;
+          mockInnerTube['streamingData']!['adaptiveFormats']! as List;
       final List<String> urls = [];
 
       for (final f in adaptiveFormats) {
@@ -953,10 +1000,10 @@ void main() {
               'musicResponsiveListItemFlexColumnRenderer': {
                 'text': {
                   'runs': [
-                    {'text': 'Husn'}
-                  ]
-                }
-              }
+                    {'text': 'Husn'},
+                  ],
+                },
+              },
             },
             {
               'musicResponsiveListItemFlexColumnRenderer': {
@@ -968,10 +1015,10 @@ void main() {
                     {'text': ' • '},
                     {'text': 'Husn'},
                     {'text': ' • '},
-                    {'text': '3:38'}
-                  ]
-                }
-              }
+                    {'text': '3:38'},
+                  ],
+                },
+              },
             }
           ],
           'thumbnail': {
@@ -981,18 +1028,18 @@ void main() {
                   {
                     'url': 'https://lh3.googleusercontent.com/test_120.jpg',
                     'width': 120,
-                    'height': 120
+                    'height': 120,
                   },
                   {
                     'url': 'https://lh3.googleusercontent.com/test_544.jpg',
                     'width': 544,
-                    'height': 544
+                    'height': 544,
                   }
-                ]
-              }
-            }
-          }
-        }
+                ],
+              },
+            },
+          },
+        },
       };
 
       final parsed = service.parseResponsiveListItem(mockItem);
@@ -1002,8 +1049,10 @@ void main() {
       expect(parsed['artist'], equals('Anuv Jain'));
       expect(parsed['genre'], equals('YouTube'));
       expect(parsed['language'], equals('YouTube'));
-      expect(parsed['perma_url'],
-          equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
+      expect(
+        parsed['perma_url'],
+        equals('https://www.youtube.com/watch?v=gJLVTKhTnog'),
+      );
       expect(parsed['expire_at'], equals('0'));
     });
 
@@ -1037,8 +1086,10 @@ void main() {
       expect(mediaItem.extras!['language'], equals('YouTube'));
       expect(mediaItem.extras!['lowUrl'], contains('itag=249'));
       expect(mediaItem.extras!['highUrl'], contains('itag=140'));
-      expect(mediaItem.extras!['perma_url'],
-          equals('https://www.youtube.com/watch?v=gJLVTKhTnog'));
+      expect(
+        mediaItem.extras!['perma_url'],
+        equals('https://www.youtube.com/watch?v=gJLVTKhTnog'),
+      );
     });
 
     test(
@@ -1051,10 +1102,12 @@ void main() {
       const rawUrl =
           'https://stream.googlevideo.com/videoplayback?itag=18&expire=1792445511';
 
-      String selectStream(String quality,
-          {required String low,
-          required String high,
-          required String fallback}) {
+      String selectStream(
+        String quality, {
+        required String low,
+        required String high,
+        required String fallback,
+      }) {
         return (quality == 'High' && high.isNotEmpty)
             ? high
             : (low.isNotEmpty ? low : fallback);
@@ -1088,13 +1141,19 @@ void main() {
       expect(canConstructSource(''), isFalse);
       expect(canConstructSource('null'), isFalse);
       expect(
-          canConstructSource('https://www.youtube.com/watch?v=123'), isFalse);
+        canConstructSource('https://www.youtube.com/watch?v=123'),
+        isFalse,
+      );
       expect(
-          canConstructSource(
-              'https://rr1.googlevideo.com/videoplayback?itag=140'),
-          isTrue);
-      expect(canConstructSource('https://aac.saavncdn.com/123/song_320.mp4'),
-          isTrue);
+        canConstructSource(
+          'https://rr1.googlevideo.com/videoplayback?itag=140',
+        ),
+        isTrue,
+      );
+      expect(
+        canConstructSource('https://aac.saavncdn.com/123/song_320.mp4'),
+        isTrue,
+      );
     });
 
     test('Sanitized diagnostics redact query parameters and signed URLs', () {
@@ -1150,35 +1209,35 @@ void main() {
                   {
                     'metadataParts': [
                       {
-                        'text': {'content': 'Playlist • 50 tracks'}
+                        'text': {'content': 'Playlist • 50 tracks'},
                       }
-                    ]
+                    ],
                   }
-                ]
-              }
-            }
-          }
+                ],
+              },
+            },
+          },
         },
         'contentImage': {
           'thumbnailViewModel': {
             'image': {
               'sources': [
-                {'url': 'https://lh3.googleusercontent.com/pl_544.jpg'}
-              ]
-            }
-          }
+                {'url': 'https://lh3.googleusercontent.com/pl_544.jpg'},
+              ],
+            },
+          },
         },
         'rendererContext': {
           'commandContext': {
             'onTap': {
               'innertubeCommand': {
                 'watchPlaylistEndpoint': {
-                  'playlistId': 'RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0'
-                }
-              }
-            }
-          }
-        }
+                  'playlistId': 'RDCLAK5uy_mFR70l_VLFRLP9RaVCz3gqeZv6IbhgMc0',
+                },
+              },
+            },
+          },
+        },
       };
 
       final cmd = ((mockLvm['rendererContext'] as Map)['commandContext']
@@ -1218,17 +1277,17 @@ void main() {
         'metadata': {
           'lockupMetadataViewModel': {
             'title': {'content': 'Official Music Video'},
-          }
+          },
         },
         'rendererContext': {
           'commandContext': {
             'onTap': {
               'innertubeCommand': {
-                'watchEndpoint': {'videoId': 'dQw4w9WgXcQ'}
-              }
-            }
-          }
-        }
+                'watchEndpoint': {'videoId': 'dQw4w9WgXcQ'},
+              },
+            },
+          },
+        },
       };
 
       final cmd = ((mockLvm['rendererContext'] as Map)['commandContext']
@@ -1276,24 +1335,24 @@ void main() {
                           'musicResponsiveHeaderRenderer': {
                             'title': {
                               'runs': [
-                                {'text': 'इश्क़ है सुकून (Ishq Hai Sukoon)'}
-                              ]
+                                {'text': 'इश्क़ है सुकून (Ishq Hai Sukoon)'},
+                              ],
                             },
                             'subtitle': {
                               'runs': [
                                 {'text': 'Playlist'},
                                 {'text': ' • '},
-                                {'text': '2026'}
-                              ]
+                                {'text': '2026'},
+                              ],
                             },
                             'description': {
                               'musicDescriptionShelfRenderer': {
                                 'description': {
                                   'runs': [
-                                    {'text': 'Tranquil, soulful watches.'}
-                                  ]
-                                }
-                              }
+                                    {'text': 'Tranquil, soulful watches.'},
+                                  ],
+                                },
+                              },
                             },
                             'thumbnail': {
                               'musicThumbnailRenderer': {
@@ -1301,18 +1360,18 @@ void main() {
                                   'thumbnails': [
                                     {
                                       'url':
-                                          'https://lh3.googleusercontent.com/pl_thumb.jpg'
+                                          'https://lh3.googleusercontent.com/pl_thumb.jpg',
                                     }
-                                  ]
-                                }
-                              }
-                            }
-                          }
+                                  ],
+                                },
+                              },
+                            },
+                          },
                         }
-                      ]
-                    }
-                  }
-                }
+                      ],
+                    },
+                  },
+                },
               }
             ],
             'secondaryContents': {
@@ -1329,10 +1388,10 @@ void main() {
                                 'musicResponsiveListItemFlexColumnRenderer': {
                                   'text': {
                                     'runs': [
-                                      {'text': 'Ranjha (ਰਾਝਾਂ)'}
-                                    ]
-                                  }
-                                }
+                                      {'text': 'Ranjha (ਰਾਝਾਂ)'},
+                                    ],
+                                  },
+                                },
                               },
                               {
                                 'musicResponsiveListItemFlexColumnRenderer': {
@@ -1342,10 +1401,10 @@ void main() {
                                       {'text': ' • '},
                                       {'text': 'Shershaah'},
                                       {'text': ' • '},
-                                      {'text': '3:48'}
-                                    ]
-                                  }
-                                }
+                                      {'text': '3:48'},
+                                    ],
+                                  },
+                                },
                               }
                             ],
                             'thumbnail': {
@@ -1354,26 +1413,26 @@ void main() {
                                   'thumbnails': [
                                     {
                                       'url':
-                                          'https://lh3.googleusercontent.com/song_thumb.jpg'
+                                          'https://lh3.googleusercontent.com/song_thumb.jpg',
                                     }
-                                  ]
-                                }
-                              }
-                            }
-                          }
+                                  ],
+                                },
+                              },
+                            },
+                          },
                         }
-                      ]
-                    }
+                      ],
+                    },
                   }
-                ]
-              }
-            }
-          }
-        }
+                ],
+              },
+            },
+          },
+        },
       };
 
       final twoCol =
-          mockBrowseResponse['contents']!['twoColumnBrowseResultsRenderer']
+          mockBrowseResponse['contents']!['twoColumnBrowseResultsRenderer']!
               as Map;
       final tab0 = (twoCol['tabs'] as List)[0]['tabRenderer']['content']
           ['sectionListRenderer']['contents'] as List;
@@ -1455,12 +1514,12 @@ void main() {
         {
           'mimeType': 'video/mp4; codecs="avc1.64001F"',
           'bitrate': 2500000,
-          'url': 'https://stream.googlevideo.com/videopart'
+          'url': 'https://stream.googlevideo.com/videopart',
         },
         {
           'mimeType': 'audio/mp4; codecs="mp4a.40.2"',
           'bitrate': 128000,
-          'url': 'https://stream.googlevideo.com/audiopart?expire=1792445511'
+          'url': 'https://stream.googlevideo.com/audiopart?expire=1792445511',
         }
       ];
 
@@ -1474,7 +1533,7 @@ void main() {
             url: f['url']!.toString(),
             mimeType: mime,
             audioCodec: 'mp4a',
-            bitrate: f['bitrate'] as int,
+            bitrate: f['bitrate']! as int,
             isAudioOnly: true,
             expireAt: 1792445511,
             resolver: 'test',
@@ -1536,8 +1595,8 @@ void main() {
           'promo:vx:data:127': {'title': 'Top Albums - Assamese'},
         },
         'promo:vx:data:127': [
-          {'id': '1', 'title': 'Assamese Song', 'language': 'Assamese'}
-        ]
+          {'id': '1', 'title': 'Assamese Song', 'language': 'Assamese'},
+        ],
       };
       final avail =
           SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Assamese');
@@ -1552,8 +1611,8 @@ void main() {
           'promo:vx:data:100': {'title': 'Top Bollywood Hits'},
         },
         'promo:vx:data:100': [
-          {'id': '1', 'title': 'Hindi Song', 'language': 'hindi'}
-        ]
+          {'id': '1', 'title': 'Hindi Song', 'language': 'hindi'},
+        ],
       };
       final avail =
           SaavnAPI.determineAvailabilityFromLaunchData(mockData, 'Urdu');
@@ -1563,12 +1622,17 @@ void main() {
     test(
         'determineAvailabilityFromLaunchData classifies unknown on empty or malformed data',
         () {
-      expect(SaavnAPI.determineAvailabilityFromLaunchData({}, 'Hindi'),
-          equals(LanguageAvailability.unknown));
       expect(
-          SaavnAPI.determineAvailabilityFromLaunchData(
-              {'modules': {}}, 'Hindi'),
-          equals(LanguageAvailability.unknown));
+        SaavnAPI.determineAvailabilityFromLaunchData({}, 'Hindi'),
+        equals(LanguageAvailability.unknown),
+      );
+      expect(
+        SaavnAPI.determineAvailabilityFromLaunchData(
+          {'modules': {}},
+          'Hindi',
+        ),
+        equals(LanguageAvailability.unknown),
+      );
     });
 
     test(
@@ -1579,33 +1643,50 @@ void main() {
       expect(FormatResponse.isLanguageUnselected('English', active), isFalse);
       expect(FormatResponse.isLanguageUnselected('Assamese', active), isTrue);
       expect(FormatResponse.isLanguageUnselected('odia', active), isTrue);
-      expect(FormatResponse.isLanguageUnselected('unknown_custom_lang', active),
-          isFalse);
+      expect(
+        FormatResponse.isLanguageUnselected('unknown_custom_lang', active),
+        isFalse,
+      );
     });
 
     test('moduleMatchesUnselectedLanguage detects regional modules correctly',
         () {
       final active = {'hindi', 'english'};
       expect(
-          FormatResponse.moduleMatchesUnselectedLanguage(
-              'Top Albums - Assamese', active),
-          isTrue);
+        FormatResponse.moduleMatchesUnselectedLanguage(
+          'Top Albums - Assamese',
+          active,
+        ),
+        isTrue,
+      );
       expect(
-          FormatResponse.moduleMatchesUnselectedLanguage(
-              'New Odia Releases', active),
-          isTrue);
+        FormatResponse.moduleMatchesUnselectedLanguage(
+          'New Odia Releases',
+          active,
+        ),
+        isTrue,
+      );
       expect(
-          FormatResponse.moduleMatchesUnselectedLanguage(
-              'Trending Hindi Songs', active),
-          isFalse);
+        FormatResponse.moduleMatchesUnselectedLanguage(
+          'Trending Hindi Songs',
+          active,
+        ),
+        isFalse,
+      );
       expect(
-          FormatResponse.moduleMatchesUnselectedLanguage(
-              'Weekly English Top 20', active),
-          isFalse);
+        FormatResponse.moduleMatchesUnselectedLanguage(
+          'Weekly English Top 20',
+          active,
+        ),
+        isFalse,
+      );
       expect(
-          FormatResponse.moduleMatchesUnselectedLanguage(
-              'Radio Stations', active),
-          isFalse);
+        FormatResponse.moduleMatchesUnselectedLanguage(
+          'Radio Stations',
+          active,
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -1622,12 +1703,15 @@ void main() {
         },
         'top_albums_odia': [],
         'top_hindi_hits': [
-          {'id': 'h1', 'title': 'Song 1'}
+          {'id': 'h1', 'title': 'Song 1'},
         ],
         'radio_stations': [],
       };
-      final lists = FormatResponse.buildHomeLists(homeData, {},
-          preferredLangs: {'hindi'});
+      final lists = FormatResponse.buildHomeLists(
+        homeData,
+        {},
+        preferredLangs: {'hindi'},
+      );
       expect(lists.contains('top_albums_odia'), isFalse);
       expect(lists.contains('top_hindi_hits'), isTrue);
     });
@@ -1640,14 +1724,17 @@ void main() {
           'hindi_promo': {'title': 'Top Albums - Hindi'},
         },
         'assamese_promo': [
-          {'id': 'a1', 'title': 'A Song'}
+          {'id': 'a1', 'title': 'A Song'},
         ],
         'hindi_promo': [
-          {'id': 'h1', 'title': 'H Song'}
+          {'id': 'h1', 'title': 'H Song'},
         ],
       };
-      final lists = FormatResponse.buildHomeLists(homeData, {},
-          preferredLangs: {'hindi'});
+      final lists = FormatResponse.buildHomeLists(
+        homeData,
+        {},
+        preferredLangs: {'hindi'},
+      );
       expect(lists.contains('assamese_promo'), isFalse);
       expect(lists.contains('hindi_promo'), isTrue);
     });
@@ -1683,10 +1770,11 @@ void main() {
         'more_info': {
           'duration': '0',
           'singers': 'Artist Name',
-        }
+        },
       };
       final formatted = await FormatResponse.formatSingleSongResponse(
-          songWithoutMoreInfoDuration);
+        songWithoutMoreInfoDuration,
+      );
       expect(formatted['duration'], equals('210'));
     });
   });
@@ -1704,7 +1792,7 @@ void main() {
           'duration': '420',
           '320kbps': 'false',
           'artistMap': {'artists': []},
-        }
+        },
       };
       final formatted =
           await FormatResponse.formatSingleSongResponse(podcastEpisode);
@@ -1718,7 +1806,7 @@ void main() {
         'id': 'ep1',
         'more_info': {
           '320kbps': 'false',
-        }
+        },
       };
       final formatted = await FormatResponse.formatSingleSongResponse(podcast);
       expect(formatted['320kbps'], isFalse);
@@ -1727,7 +1815,7 @@ void main() {
         'id': 's2',
         'more_info': {
           '320kbps': 'true',
-        }
+        },
       };
       final formattedSong =
           await FormatResponse.formatSingleSongResponse(highQualitySong);
@@ -1737,12 +1825,18 @@ void main() {
 
   group('Restored YouTube Subsystem & Media URL Hardening Tests', () {
     test('getImageUrl normalizes protocol-relative and http URLs', () {
-      expect(getImageUrl('//c.saavncdn.com/123.jpg'),
-          equals('https://c.saavncdn.com/123.jpg'));
-      expect(getImageUrl('http://c.saavncdn.com/123.jpg'),
-          equals('https://c.saavncdn.com/123.jpg'));
-      expect(getImageUrl('https://c.saavncdn.com/123.jpg'),
-          equals('https://c.saavncdn.com/123.jpg'));
+      expect(
+        getImageUrl('//c.saavncdn.com/123.jpg'),
+        equals('https://c.saavncdn.com/123.jpg'),
+      );
+      expect(
+        getImageUrl('http://c.saavncdn.com/123.jpg'),
+        equals('https://c.saavncdn.com/123.jpg'),
+      );
+      expect(
+        getImageUrl('https://c.saavncdn.com/123.jpg'),
+        equals('https://c.saavncdn.com/123.jpg'),
+      );
     });
 
     test(
@@ -1753,31 +1847,31 @@ void main() {
           'gridPlaylistRenderer': {
             'title': {
               'runs': [
-                {'text': 'Top 50 India'}
-              ]
+                {'text': 'Top 50 India'},
+              ],
             },
             'shortBylineText': {
               'runs': [
-                {'text': 'Trending charts'}
-              ]
+                {'text': 'Trending charts'},
+              ],
             },
             'videoCountText': {
               'runs': [
-                {'text': '50 tracks'}
-              ]
+                {'text': '50 tracks'},
+              ],
             },
             'navigationEndpoint': {
               'watchEndpoint': {
                 'playlistId': 'PLchart123',
                 'videoId': 'vid987',
-              }
+              },
             },
             'thumbnail': {
               'thumbnails': [
-                {'url': 'https://i.ytimg.com/vi/vid987/hqdefault.jpg'}
-              ]
-            }
-          }
+                {'url': 'https://i.ytimg.com/vi/vid987/hqdefault.jpg'},
+              ],
+            },
+          },
         }
       ];
       final res = YouTubeServices().formatChartItems(input);
@@ -1786,8 +1880,10 @@ void main() {
       expect(res[0]['type'], equals('chart'));
       expect(res[0]['playlistId'], equals('PLchart123'));
       expect(res[0]['firstItemId'], equals('vid987'));
-      expect(res[0]['image'],
-          equals('https://i.ytimg.com/vi/vid987/hqdefault.jpg'));
+      expect(
+        res[0]['image'],
+        equals('https://i.ytimg.com/vi/vid987/hqdefault.jpg'),
+      );
     });
 
     test('formatItems handles empty or malformed inputs without throwing', () {
@@ -1795,7 +1891,7 @@ void main() {
       expect(resEmpty, isEmpty);
 
       final resMalformed = YouTubeServices().formatItems([
-        {'bad': 'data'}
+        {'bad': 'data'},
       ]);
       expect(resMalformed, isEmpty);
     });
@@ -1806,18 +1902,18 @@ void main() {
           'defaultPromoPanelRenderer': {
             'title': {
               'runs': [
-                {'text': 'Headline Special'}
-              ]
+                {'text': 'Headline Special'},
+              ],
             },
             'description': {
               'runs': [
-                {'text': 'Exclusive audio release'}
-              ]
+                {'text': 'Exclusive audio release'},
+              ],
             },
             'navigationEndpoint': {
               'watchEndpoint': {
                 'videoId': 'promo123',
-              }
+              },
             },
             'largeFormFactorBackgroundThumbnail': {
               'thumbnailLandscapePortraitRenderer': {
@@ -1827,19 +1923,21 @@ void main() {
                     {'url': 'https://i.ytimg.com/vi/promo123/thumb1.jpg'},
                     {'url': 'https://i.ytimg.com/vi/promo123/thumb2.jpg'},
                     {'url': 'https://i.ytimg.com/vi/promo123/thumb3.jpg'},
-                  ]
-                }
-              }
-            }
-          }
+                  ],
+                },
+              },
+            },
+          },
         }
       ];
       final res = YouTubeServices().formatHeadItems(input);
       expect(res.length, equals(1));
       expect(res[0]['title'], equals('Headline Special'));
       expect(res[0]['navigationEndpoint'], equals('promo123'));
-      expect(res[0]['imageMax'],
-          equals('https://i.ytimg.com/vi/promo123/thumb3.jpg'));
+      expect(
+        res[0]['imageMax'],
+        equals('https://i.ytimg.com/vi/promo123/thumb3.jpg'),
+      );
     });
   });
 
@@ -1854,7 +1952,7 @@ void main() {
             'title': 'Radio Stations',
             'subtitle': 'Live stations',
             'position': '1',
-          }
+          },
         },
         'radio': [],
       };
@@ -1862,7 +1960,7 @@ void main() {
         input,
         {},
         likedRadioList: [
-          {'id': 'saved_station'}
+          {'id': 'saved_station'},
         ],
         preferredLangs: {'hindi'},
       );
@@ -1894,22 +1992,20 @@ void main() {
             'id': 's1',
             'title': 'Radio Track 1',
             'type': 'song',
-          }
+          },
         },
         '1': {
           'song': {
             'id': 's2',
             'title': 'Radio Track 2',
             'type': 'song',
-          }
+          },
         },
         'extra_key': 'ignored',
       };
       final songList = <Map>[];
       rawRadioResponse.forEach((key, value) {
-        if (int.tryParse(key.toString()) != null &&
-            value is Map &&
-            value['song'] is Map) {
+        if (int.tryParse(key) != null && value is Map && value['song'] is Map) {
           songList.add(value['song'] as Map);
         }
       });
@@ -1926,14 +2022,12 @@ void main() {
             'id': 'only_song',
             'title': 'Solo Station Song',
             'type': 'song',
-          }
+          },
         },
       };
       final songList = <Map>[];
       rawRadioResponse.forEach((key, value) {
-        if (int.tryParse(key.toString()) != null &&
-            value is Map &&
-            value['song'] is Map) {
+        if (int.tryParse(key) != null && value is Map && value['song'] is Map) {
           songList.add(value['song'] as Map);
         }
       });
@@ -1945,45 +2039,63 @@ void main() {
   group('Playlist Imports & Deezer Provider Tests', () {
     test('parseDeezerPlaylistId extracts ID from numeric strings and URLs',
         () async {
-      expect(await SearchAddPlaylist.parseDeezerPlaylistId('908622995'),
-          equals('908622995'));
       expect(
-          await SearchAddPlaylist.parseDeezerPlaylistId(
-              'https://www.deezer.com/playlist/908622995'),
-          equals('908622995'));
+        await SearchAddPlaylist.parseDeezerPlaylistId('908622995'),
+        equals('908622995'),
+      );
       expect(
-          await SearchAddPlaylist.parseDeezerPlaylistId(
-              'https://www.deezer.com/en/playlist/908622995?utm_source=test'),
-          equals('908622995'));
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://www.deezer.com/playlist/908622995',
+        ),
+        equals('908622995'),
+      );
       expect(
-          await SearchAddPlaylist.parseDeezerPlaylistId(
-              'https://www.deezer.com/fr/playlist/123456789/'),
-          equals('123456789'));
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://www.deezer.com/en/playlist/908622995?utm_source=test',
+        ),
+        equals('908622995'),
+      );
       expect(
-          await SearchAddPlaylist.parseDeezerPlaylistId(
-              'https://invalid.com/track/123'),
-          isNull);
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://www.deezer.com/fr/playlist/123456789/',
+        ),
+        equals('123456789'),
+      );
+      expect(
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://invalid.com/track/123',
+        ),
+        isNull,
+      );
     });
 
     test(
         'parseJioSaavnToken parses URLs with trailing slashes and query params',
         () {
       expect(
-          SearchAddPlaylist.parseJioSaavnToken(
-              'https://www.jiosaavn.com/featured/romantic-hindi/abcde'),
-          equals('abcde'));
+        SearchAddPlaylist.parseJioSaavnToken(
+          'https://www.jiosaavn.com/featured/romantic-hindi/abcde',
+        ),
+        equals('abcde'),
+      );
       expect(
-          SearchAddPlaylist.parseJioSaavnToken(
-              'https://www.jiosaavn.com/featured/romantic-hindi/abcde?autoplay=true'),
-          equals('abcde'));
+        SearchAddPlaylist.parseJioSaavnToken(
+          'https://www.jiosaavn.com/featured/romantic-hindi/abcde?autoplay=true',
+        ),
+        equals('abcde'),
+      );
       expect(
-          SearchAddPlaylist.parseJioSaavnToken(
-              'https://www.jiosaavn.com/featured/romantic-hindi/abcde/'),
-          equals('abcde'));
+        SearchAddPlaylist.parseJioSaavnToken(
+          'https://www.jiosaavn.com/featured/romantic-hindi/abcde/',
+        ),
+        equals('abcde'),
+      );
       expect(
-          SearchAddPlaylist.parseJioSaavnToken(
-              'https://www.jiosaavn.com/featured/romantic-hindi/abcde/?param=1&param=2'),
-          equals('abcde'));
+        SearchAddPlaylist.parseJioSaavnToken(
+          'https://www.jiosaavn.com/featured/romantic-hindi/abcde/?param=1&param=2',
+        ),
+        equals('abcde'),
+      );
       expect(SearchAddPlaylist.parseJioSaavnToken('abcde'), equals('abcde'));
     });
 
@@ -1995,16 +2107,22 @@ void main() {
       const withExtra =
           'https://www.youtube.com/watch?v=vid123&list=PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1&index=2';
 
-      final matchStandard = RegExp(r'[?&]list=([^#&]+)').firstMatch(standardYt);
-      final matchMusic = RegExp(r'[?&]list=([^#&]+)').firstMatch(musicYt);
-      final matchExtra = RegExp(r'[?&]list=([^#&]+)').firstMatch(withExtra);
+      final matchStandard = RegExp('[?&]list=([^#&]+)').firstMatch(standardYt);
+      final matchMusic = RegExp('[?&]list=([^#&]+)').firstMatch(musicYt);
+      final matchExtra = RegExp('[?&]list=([^#&]+)').firstMatch(withExtra);
 
-      expect(matchStandard?.group(1),
-          equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
       expect(
-          matchMusic?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+        matchStandard?.group(1),
+        equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'),
+      );
       expect(
-          matchExtra?.group(1), equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'));
+        matchMusic?.group(1),
+        equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'),
+      );
+      expect(
+        matchExtra?.group(1),
+        equals('PLrAl5_J2KAWDd5h6f_Ytqg0L2Z_eW8uN1'),
+      );
     });
 
     test('Deezer track data structure normalizes properly', () {
@@ -2016,7 +2134,7 @@ void main() {
         'album': {'title': '1 (Remastered)'},
       };
       final title = deezerTrack['title']?.toString();
-      final artist = (deezerTrack['artist'] as Map)['name']?.toString();
+      final artist = (deezerTrack['artist']! as Map)['name']?.toString();
       final query = '$title by $artist';
       expect(title, equals('Hey Jude'));
       expect(artist, equals('The Beatles'));
@@ -2052,7 +2170,7 @@ void main() {
     });
 
     test('GitHub update checker result model and status values', () {
-      final available = UpdateCheckResult(
+      const available = UpdateCheckResult(
         status: UpdateCheckStatus.updateAvailable,
         latestVersion: '1.15.9',
         releaseUrl:
@@ -2061,13 +2179,13 @@ void main() {
       expect(available.status, equals(UpdateCheckStatus.updateAvailable));
       expect(available.latestVersion, equals('1.15.9'));
 
-      final upToDate = UpdateCheckResult(
+      const upToDate = UpdateCheckResult(
         status: UpdateCheckStatus.upToDate,
         latestVersion: '1.15.8',
       );
       expect(upToDate.status, equals(UpdateCheckStatus.upToDate));
 
-      final failed = UpdateCheckResult(
+      const failed = UpdateCheckResult(
         status: UpdateCheckStatus.failed,
         message: 'Network timeout',
       );
@@ -2080,21 +2198,35 @@ void main() {
     test(
         'verifies exact user-provided URLs without trailing whitespace or NBSP',
         () {
-      expect(AppLinks.buyMeACoffeeUrl,
-          equals('https://buymeacoffee.com/thevibingteen'));
-      expect(AppLinks.paypalDonationUrl,
-          equals('https://www.paypal.com/ncp/payment/859SMGK59Z48L'));
+      expect(
+        AppLinks.buyMeACoffeeUrl,
+        equals('https://buymeacoffee.com/thevibingteen'),
+      );
+      expect(
+        AppLinks.paypalDonationUrl,
+        equals('https://www.paypal.com/ncp/payment/859SMGK59Z48L'),
+      );
       expect(AppLinks.contactEmail, equals('thevibingteen@gmail.com'));
       expect(
-          AppLinks.contactEmailUrl, equals('mailto:thevibingteen@gmail.com'));
-      expect(AppLinks.instagramUrl,
-          equals('https://www.instagram.com/thevibingteen'));
+        AppLinks.contactEmailUrl,
+        equals('mailto:thevibingteen@gmail.com'),
+      );
       expect(
-          AppLinks.telegramGroupUrl, equals('https://t.me/+_9wHWiHi1MdmMGM1'));
+        AppLinks.instagramUrl,
+        equals('https://www.instagram.com/thevibingteen'),
+      );
       expect(
-          AppLinks.telegramChannelUrl, equals('https://t.me/blackholerevived'));
-      expect(AppLinks.githubRepoUrl,
-          equals('https://github.com/thevibingteen/BlackHole'));
+        AppLinks.telegramGroupUrl,
+        equals('https://t.me/+_9wHWiHi1MdmMGM1'),
+      );
+      expect(
+        AppLinks.telegramChannelUrl,
+        equals('https://t.me/blackholerevived'),
+      );
+      expect(
+        AppLinks.githubRepoUrl,
+        equals('https://github.com/thevibingteen/BlackHole'),
+      );
 
       // Check no leading/trailing whitespace or NBSP (\u00A0)
       for (final url in [
@@ -2114,8 +2246,10 @@ void main() {
     });
 
     test('telegram channel and group URLs are distinct destinations', () {
-      expect(AppLinks.telegramGroupUrl,
-          isNot(equals(AppLinks.telegramChannelUrl)));
+      expect(
+        AppLinks.telegramGroupUrl,
+        isNot(equals(AppLinks.telegramChannelUrl)),
+      );
       expect(AppLinks.telegramGroupUrl, contains('+_9wHWiHi1MdmMGM1'));
       expect(AppLinks.telegramChannelUrl, contains('blackholerevived'));
     });
@@ -2150,8 +2284,10 @@ void main() {
       await tester.tap(find.text('Donate'));
       await tester.pump();
       expect(launchedUris.length, equals(1));
-      expect(launchedUris.first.toString(),
-          equals('https://www.paypal.com/ncp/payment/859SMGK59Z48L'));
+      expect(
+        launchedUris.first.toString(),
+        equals('https://www.paypal.com/ncp/payment/859SMGK59Z48L'),
+      );
 
       // Immediate second tap should be debounced
       await tester.tap(find.text('Donate'));
@@ -2256,22 +2392,264 @@ void main() {
 
   group('Application Branding & Manifest Invariants Tests', () {
     test(
-        'AndroidManifest.xml contains exact label "Black Hole" and preserves package identity',
+        'AndroidManifest.xml contains exact label "BlackHole" and preserves package identity',
         () {
       final manifestFile = File('android/app/src/main/AndroidManifest.xml');
       expect(manifestFile.existsSync(), isTrue);
       final manifestContent = manifestFile.readAsStringSync();
-      expect(manifestContent.contains('android:label="Black Hole"'), isTrue);
+      expect(manifestContent.contains('android:label="BlackHole"'), isTrue);
       expect(
-          manifestContent.contains('package="com.shadow.blackhole"'), isTrue);
+        manifestContent.contains('package="com.shadow.blackhole"'),
+        isTrue,
+      );
     });
 
-    test('CI workflow verifies android:label="Black Hole"', () {
+    test('CI workflow verifies android:label="BlackHole"', () {
       final ciFile = File('.github/workflows/ui-reference-build.yml');
       expect(ciFile.existsSync(), isTrue);
       final ciContent = ciFile.readAsStringSync();
       expect(
-          ciContent.contains('grep -n \'android:label="Black Hole"\''), isTrue);
+        ciContent.contains('grep -n \'android:label="BlackHole"\''),
+        isTrue,
+      );
+    });
+  });
+
+  group('Task A: Theme Configuration & Purple 400 Invariants Tests', () {
+    test('Fresh install defaults to Purple 400 and seeds Hive box', () async {
+      final tempDir = Directory.systemTemp.createTempSync('hive_theme_fresh_');
+      Hive.init(tempDir.path);
+      final Box settingsBox = await Hive.openBox('settings');
+      expect(settingsBox.containsKey('themeColor'), isFalse);
+      expect(settingsBox.containsKey('colorHue'), isFalse);
+
+      final MyTheme theme = MyTheme();
+      expect(theme.accentColor, equals('Purple'));
+      expect(theme.colorHue, equals(400));
+      expect(settingsBox.get('themeColor'), equals('Purple'));
+      expect(settingsBox.get('colorHue'), equals(400));
+      expect(theme.currentColor(), equals(Colors.purpleAccent[400]));
+
+      await settingsBox.close();
+      await Hive.close();
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('Existing user theme selections are strictly preserved on startup',
+        () async {
+      final tempDir =
+          Directory.systemTemp.createTempSync('hive_theme_existing_');
+      Hive.init(tempDir.path);
+      final Box settingsBox = await Hive.openBox('settings');
+      await settingsBox.put('themeColor', 'Teal');
+      await settingsBox.put('colorHue', 700);
+
+      final MyTheme theme = MyTheme();
+      expect(theme.accentColor, equals('Teal'));
+      expect(theme.colorHue, equals(700));
+      expect(settingsBox.get('themeColor'), equals('Teal'));
+      expect(settingsBox.get('colorHue'), equals(700));
+
+      await settingsBox.close();
+      await Hive.close();
+      tempDir.deleteSync(recursive: true);
+    });
+  });
+
+  group('Task C: Playlist Import Restoration & URL Parsing Tests', () {
+    test('YouTube playlist link and ID parsing handles multiple URL formats',
+        () {
+      expect(
+        SearchAddPlaylist.parseYtPlaylistId(
+          'https://www.youtube.com/playlist?list=PLw-VjHDlEOgvWXXbl4x2YfS8Lw0r7tZfX',
+        ),
+        equals('PLw-VjHDlEOgvWXXbl4x2YfS8Lw0r7tZfX'),
+      );
+      expect(
+        SearchAddPlaylist.parseYtPlaylistId(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890abcdef',
+        ),
+        equals('PL1234567890abcdef'),
+      );
+      expect(
+        SearchAddPlaylist.parseYtPlaylistId(
+          'https://music.youtube.com/playlist?list=PLMusicList12345',
+        ),
+        equals('PLMusicList12345'),
+      );
+      expect(
+        SearchAddPlaylist.parseYtPlaylistId('PLDirectPlaylistId12345'),
+        equals('PLDirectPlaylistId12345'),
+      );
+      expect(
+        SearchAddPlaylist.parseYtPlaylistId('https://youtube.com'),
+        isNull,
+      );
+      expect(SearchAddPlaylist.parseYtPlaylistId(''), isNull);
+    });
+
+    test('Spotify playlist link and URI parsing handles valid and edge cases',
+        () {
+      expect(
+        SearchAddPlaylist.parseSpotifyPlaylistId(
+          'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abcd1234',
+        ),
+        equals('37i9dQZF1DXcBWIGoYBM5M'),
+      );
+      expect(
+        SearchAddPlaylist.parseSpotifyPlaylistId(
+          'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M/',
+        ),
+        equals('37i9dQZF1DXcBWIGoYBM5M'),
+      );
+      expect(
+        SearchAddPlaylist.parseSpotifyPlaylistId(
+          'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M',
+        ),
+        equals('37i9dQZF1DXcBWIGoYBM5M'),
+      );
+      expect(
+        SearchAddPlaylist.parseSpotifyPlaylistId('37i9dQZF1DXcBWIGoYBM5M'),
+        equals('37i9dQZF1DXcBWIGoYBM5M'),
+      );
+      expect(
+        SearchAddPlaylist.parseSpotifyPlaylistId(
+          'https://open.spotify.com/album/37i9dQZF1DXcBWIGoYBM5M',
+        ),
+        isNull,
+      );
+      expect(SearchAddPlaylist.parseSpotifyPlaylistId(''), isNull);
+    });
+
+    test('Deezer playlist and album URL parser handles various schemes',
+        () async {
+      expect(
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://www.deezer.com/playlist/3155776842',
+        ),
+        equals('3155776842'),
+      );
+      expect(
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://www.deezer.com/en/playlist/3155776842',
+        ),
+        equals('3155776842'),
+      );
+      expect(
+        await SearchAddPlaylist.parseDeezerPlaylistId(
+          'https://www.deezer.com/album/987654321',
+        ),
+        equals('987654321'),
+      );
+      expect(
+        await SearchAddPlaylist.parseDeezerPlaylistId('3155776842'),
+        equals('3155776842'),
+      );
+    });
+
+    test('JioSaavn token parser extracts token from playlist and album links',
+        () {
+      expect(
+        SearchAddPlaylist.parseJioSaavnToken(
+          'https://www.jiosaavn.com/featured/weekly-top-songs/8MT-LQlP35c_',
+        ),
+        equals('8MT-LQlP35c_'),
+      );
+      expect(
+        SearchAddPlaylist.parseJioSaavnToken(
+          'https://www.jiosaavn.com/album/rockstar/abc123token_?query=test',
+        ),
+        equals('abc123token_'),
+      );
+      expect(
+        SearchAddPlaylist.parseJioSaavnToken('rawTokenIdentifier_123'),
+        equals('rawTokenIdentifier_123'),
+      );
+    });
+  });
+
+  group(
+      'Task D & F: YouTube Streaming Optimization & Security Invariants Tests',
+      () {
+    test(
+        'selectStreamUrls sorts candidates by bitrate and selects audio-only streams',
+        () {
+      final candidates = [
+        YouTubeStreamCandidate(
+          videoId: 'vid123',
+          url:
+              'https://rr1---sn.googlevideo.com/videoplayback?id=vid123&itag=140&bitrate=128000',
+          mimeType: 'audio/mp4',
+          audioCodec: 'mp4a.40.2',
+          bitrate: 128000,
+          isAudioOnly: true,
+          resolver: 'test',
+        ),
+        YouTubeStreamCandidate(
+          videoId: 'vid123',
+          url:
+              'https://rr2---sn.googlevideo.com/videoplayback?id=vid123&itag=251&bitrate=160000',
+          mimeType: 'audio/webm',
+          audioCodec: 'opus',
+          bitrate: 160000,
+          isAudioOnly: true,
+          resolver: 'test',
+        ),
+        YouTubeStreamCandidate(
+          videoId: 'vid123',
+          url:
+              'https://rr3---sn.googlevideo.com/videoplayback?id=vid123&itag=249&bitrate=50000',
+          mimeType: 'audio/webm',
+          audioCodec: 'opus',
+          bitrate: 50000,
+          isAudioOnly: true,
+          resolver: 'test',
+        ),
+      ];
+
+      final urls = selectStreamUrls(candidates);
+      expect(urls.length, equals(2));
+      // First is low bitrate
+      expect(urls.first.contains('bitrate=50000'), isTrue);
+      // Last is high bitrate
+      expect(urls.last.contains('bitrate=160000'), isTrue);
+    });
+
+    test('File export filename sanitization eliminates path traversal vectors',
+        () {
+      const maliciousShowName = '../../etc/passwd';
+      final sanitized = maliciousShowName
+          .replaceAll(RegExp(r'[\.\\\*\:\"\?#/;\|]'), '')
+          .trim();
+      final safeName = sanitized.isEmpty ? 'Playlist' : sanitized;
+      expect(safeName, equals('etcpasswd'));
+      expect(safeName.contains('.'), isFalse);
+      expect(safeName.contains('/'), isFalse);
+      expect(safeName.contains('\\'), isFalse);
+    });
+
+    test('JSON array import correctly maps song entries by id', () {
+      final jsonArrayString = json.encode([
+        {'id': 'song_1', 'title': 'Track One', 'artist': 'Artist A'},
+        {'id': 'song_2', 'title': 'Track Two', 'artist': 'Artist B'},
+      ]);
+      final dynamic decoded = json.decode(jsonArrayString);
+      expect(decoded is List, isTrue);
+
+      final Map songsMap = {};
+      for (int i = 0; i < (decoded as List).length; i++) {
+        final item = decoded[i];
+        if (item is Map) {
+          final String key = item['id']?.toString() ?? i.toString();
+          songsMap[key] = item;
+        }
+      }
+
+      expect(songsMap.length, equals(2));
+      expect(songsMap.containsKey('song_1'), isTrue);
+      expect(songsMap['song_1']['title'], equals('Track One'));
+      expect(songsMap.containsKey('song_2'), isTrue);
+      expect(songsMap['song_2']['artist'], equals('Artist B'));
     });
   });
 }

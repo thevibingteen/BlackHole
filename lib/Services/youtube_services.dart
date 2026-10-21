@@ -131,6 +131,21 @@ class YouTubeServices {
             .toString();
       }
 
+      // If we already have essential metadata (title & artist), resolve stream directly without redundant getVideoFromId
+      if (data != null &&
+          (data['title']?.toString() ?? '').isNotEmpty &&
+          (data['artist']?.toString() ?? '').isNotEmpty &&
+          (getUrl ?? true)) {
+        final Map? innerRes = await formatVideoFromInnerTube(
+          id: id,
+          quality: quality,
+          data: data,
+        );
+        if (innerRes != null) {
+          return innerRes;
+        }
+      }
+
       final Video? vid = await getVideoFromId(id);
       if (vid != null) {
         final Map? response = await formatVideo(
@@ -325,8 +340,7 @@ class YouTubeServices {
                     : '';
 
                 // Structured navigation endpoint parsing
-                final String contentType =
-                    lvm['contentType']?.toString() ?? '';
+                final String contentType = lvm['contentType']?.toString() ?? '';
                 final String contentId = lvm['contentId']?.toString() ?? '';
                 final cmd = lvm['rendererContext']?['commandContext']?['onTap']
                     ?['innertubeCommand'];
@@ -837,8 +851,7 @@ class YouTubeServices {
       final List<Map> results = [];
 
       for (final sec in contents) {
-        final itemSec =
-            sec['itemSectionRenderer']?['contents'] as List? ?? [];
+        final itemSec = sec['itemSectionRenderer']?['contents'] as List? ?? [];
         for (final item in itemSec) {
           final vid = item['videoRenderer'] ?? item['compactVideoRenderer'];
           if (vid != null && vid['videoId'] != null) {
@@ -1199,7 +1212,7 @@ class YouTubeServices {
     try {
       final StreamManifest manifest = await yt.videos.streamsClient
           .getManifest(video.id)
-          .timeout(const Duration(seconds: 35));
+          .timeout(const Duration(seconds: 4));
       stopwatch.stop();
 
       final List<YouTubeStreamCandidate> candidates = [];
@@ -1296,4 +1309,3 @@ class YouTubeServices {
     return [];
   }
 }
-

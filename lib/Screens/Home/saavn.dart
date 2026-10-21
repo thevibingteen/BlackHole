@@ -45,7 +45,8 @@ List preferredLanguage = Hive.box('settings')
 List likedRadio =
     Hive.box('settings').get('likedRadio', defaultValue: []) as List;
 Map data = Hive.box('cache').get('homepage', defaultValue: {}) as Map;
-List lists = buildHomeLists(data, Hive.box('settings').get('likedArtists', defaultValue: {}) as Map);
+List lists = buildHomeLists(
+    data, Hive.box('settings').get('likedArtists', defaultValue: {}) as Map);
 
 List buildHomeLists(Map homeData, Map likedArtistsMap) {
   return FormatResponse.buildHomeLists(
@@ -185,7 +186,7 @@ class _SaavnHomePageState extends State<SaavnHomePage>
           )
         : ListView.builder(
             physics: const BouncingScrollPhysics(),
-            shrinkWrap: true,
+            shrinkWrap: false,
             padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
             itemCount: data.isEmpty ? 2 : lists.length,
             itemBuilder: (context, idx) {
@@ -483,9 +484,7 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                       moduleData.isEmpty &&
                       (!isRadio || likedRadio.isEmpty));
               final isBlacklisted = blacklistedHomeSections.contains(
-                data['modules']?[listKey]?['title']
-                    ?.toString()
-                    .toLowerCase(),
+                data['modules']?[listKey]?['title']?.toString().toLowerCase(),
               );
 
               return (isEffectivelyEmpty || isBlacklisted)
@@ -611,7 +610,9 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                             itemCount: isRadio
-                                ? ((moduleData is List ? moduleData.length : 0) +
+                                ? ((moduleData is List
+                                        ? moduleData.length
+                                        : 0) +
                                     likedRadio.length)
                                 : (moduleData is List ? moduleData.length : 0),
                             itemBuilder: (context, index) {
@@ -739,8 +740,7 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                                           .isNotEmpty ==
                                                       true
                                                   ? item['title'].toString()
-                                                  : item['name']
-                                                          ?.toString() ??
+                                                  : item['name']?.toString() ??
                                                       ''))
                                           : (item['id']
                                                       ?.toString()
@@ -752,8 +752,7 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                                           .isNotEmpty ==
                                                       true
                                                   ? item['title'].toString()
-                                                  : item['name']
-                                                          ?.toString() ??
+                                                  : item['name']?.toString() ??
                                                       ''));
                                       final lang = item['more_info']
                                               ?['language']

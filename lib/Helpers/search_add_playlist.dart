@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
+import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/playlist.dart';
 import 'package:blackhole/Services/youtube_services.dart';
 import 'package:flutter/material.dart';
@@ -32,14 +33,30 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 // ignore: avoid_classes_with_only_static_members
 class SearchAddPlaylist {
+  static String? parseYtPlaylistId(String inLink) {
+    final trimmed = inLink.trim();
+    if (trimmed.isEmpty) return null;
+    final match = RegExp(r'[?&]list=([^#&]+)').firstMatch(trimmed);
+    if (match != null) return match.group(1);
+    if (!trimmed.contains('/') && trimmed.length >= 10) return trimmed;
+    return null;
+  }
+
+  static String? parseSpotifyPlaylistId(String link) {
+    final trimmed = link.trim();
+    if (trimmed.isEmpty) return null;
+    final uriMatch =
+        RegExp(r'spotify:playlist:([a-zA-Z0-9]+)').firstMatch(trimmed);
+    if (uriMatch != null) return uriMatch.group(1);
+    final urlMatch = RegExp(r'playlist\/([a-zA-Z0-9]+)').firstMatch(trimmed);
+    if (urlMatch != null) return urlMatch.group(1);
+    if (RegExp(r'^[a-zA-Z0-9]{22}$').hasMatch(trimmed)) return trimmed;
+    return null;
+  }
+
   static Future<Map> addYtPlaylist(String inLink) async {
     try {
-      final trimmed = inLink.trim();
-      final match = RegExp(r'[?&]list=([^#&]+)').firstMatch(trimmed);
-      String? playlistId = match?.group(1);
-      if (playlistId == null && !trimmed.contains('/') && trimmed.length >= 10) {
-        playlistId = trimmed;
-      }
+      final String? playlistId = parseYtPlaylistId(inLink);
       if (playlistId != null && playlistId.isNotEmpty) {
         final Playlist metadata =
             await YouTubeServices().getPlaylistDetails(playlistId);
@@ -85,11 +102,12 @@ class SearchAddPlaylist {
     if (RegExp(r'^\d+$').hasMatch(trimmed)) {
       return trimmed;
     }
-    final match = RegExp(r'playlist\/(\d+)').firstMatch(trimmed);
+    final match = RegExp(r'(?:playlist|album)\/(\d+)').firstMatch(trimmed);
     if (match != null) {
       return match.group(1);
     }
-    if (trimmed.contains('deezer.page.link') || trimmed.contains('deezer.com')) {
+    if (trimmed.contains('deezer.page.link') ||
+        trimmed.contains('deezer.com')) {
       try {
         final req = Request('GET', Uri.parse(trimmed))..followRedirects = false;
         final client = Client();
@@ -98,7 +116,8 @@ class SearchAddPlaylist {
         client.close();
         final location = streamed.headers['location'];
         if (location != null && location.isNotEmpty) {
-          final locMatch = RegExp(r'playlist\/(\d+)').firstMatch(location);
+          final locMatch =
+              RegExp(r'(?:playlist|album)\/(\d+)').firstMatch(location);
           if (locMatch != null) {
             return locMatch.group(1);
           }
@@ -132,9 +151,8 @@ class SearchAddPlaylist {
       if (res['tracks'] is Map && res['tracks']['data'] is List) {
         allTracks.addAll(res['tracks']['data'] as List);
         String? nextUrl = res['tracks']['next']?.toString();
-        while (nextUrl != null &&
-            nextUrl.isNotEmpty &&
-            allTracks.length < 500) {
+        while (
+            nextUrl != null && nextUrl.isNotEmpty && allTracks.length < 500) {
           try {
             final pageRes = await get(Uri.parse(nextUrl))
                 .timeout(const Duration(seconds: 10));
@@ -187,9 +205,8 @@ class SearchAddPlaylist {
       try {
         trackName = track['title']?.toString() ?? '';
         artistName = track['artist']?['name']?.toString() ?? '';
-        final displayName = artistName.isNotEmpty
-            ? '$trackName - $artistName'
-            : trackName;
+        final displayName =
+            artistName.isNotEmpty ? '$trackName - $artistName' : trackName;
         yield {'done': ++done, 'name': displayName};
       } catch (e) {
         yield {'done': ++done, 'name': ''};
@@ -263,7 +280,8 @@ class SearchAddPlaylist {
         return res['tracks'] as List;
       }
     } catch (e) {
-      Logger.root.warning('Resso service error (service retired/unavailable): $e');
+      Logger.root
+          .warning('Resso service error (service retired/unavailable): $e');
     }
     return [];
   }
@@ -271,8 +289,7 @@ class SearchAddPlaylist {
   static String parseJioSaavnToken(String inLink) {
     try {
       final uri = Uri.parse(inLink.trim());
-      final pathSegments =
-          uri.pathSegments.where((s) => s.isNotEmpty).toList();
+      final pathSegments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
       if (pathSegments.isNotEmpty) {
         return pathSegments.last;
       }
@@ -285,14 +302,17 @@ class SearchAddPlaylist {
   static Future<Map> addJioSaavnPlaylist(String inLink) async {
     try {
       final String id = parseJioSaavnToken(inLink);
+      final String type = inLink.contains('/album/') ? 'album' : 'playlist';
       if (id.isNotEmpty) {
-        final Map data =
-            await SaavnAPI().getSongFromToken(id, 'playlist', n: -1);
-        if (data.isNotEmpty && data['list'] is List) {
+        final Map data = await SaavnAPI().getSongFromToken(id, type, n: -1);
+        final rawTracks = (data['list'] ?? data['songs']) as List? ?? [];
+        if (data.isNotEmpty && rawTracks.isNotEmpty) {
+          final List formattedTracks =
+              await FormatResponse.formatSongsResponse(rawTracks, type);
           return {
             'title': data['title'] ?? 'JioSaavn Playlist',
-            'count': (data['list'] as List).length,
-            'tracks': data['list'],
+            'count': formattedTracks.length,
+            'tracks': formattedTracks,
           };
         }
       }
@@ -308,17 +328,36 @@ class SearchAddPlaylist {
     for (final track in tracks) {
       String? trackName;
       try {
-        trackName = (track as Video).title;
+        final video = track as Video;
+        trackName = video.title;
         yield {'done': ++done, 'name': trackName};
+
+        final Map songMap = {
+          'id': video.id.value,
+          'album': video.author.replaceAll('- Topic', '').trim(),
+          'duration': video.duration?.inSeconds.toString() ?? '0',
+          'title': video.title.trim(),
+          'artist': video.author.replaceAll('- Topic', '').trim(),
+          'image': video.thumbnails.highResUrl,
+          'secondImage': video.thumbnails.standardResUrl,
+          'language': 'YouTube',
+          'genre': 'YouTube',
+          'expire_at': 0,
+          'url': '',
+          'lowUrl': '',
+          'highUrl': '',
+          'year': video.uploadDate?.year.toString() ?? '',
+          '320kbps': 'false',
+          'has_lyrics': 'false',
+          'release_date': video.publishDate.toString(),
+          'album_id': video.channelId.value,
+          'subtitle': video.author,
+          'perma_url': video.url,
+        };
+        addMapToPlaylist(playName, songMap);
       } catch (e) {
         yield {'done': ++done, 'name': ''};
-      }
-      try {
-        final List result =
-            await SaavnAPI().fetchTopSearchResult(trackName!.split('|')[0]);
-        addMapToPlaylist(playName, result[0] as Map);
-      } catch (e) {
-        Logger.root.severe('Error in $done: $e');
+        Logger.root.severe('Error adding YouTube track $done: $e');
       }
     }
   }

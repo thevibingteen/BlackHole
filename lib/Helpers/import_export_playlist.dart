@@ -52,9 +52,13 @@ Future<void> exportPlaylist(
     final Box playlistBox = Hive.box(playlistName);
     final Map songsMap = playlistBox.toMap();
     final String songs = json.encode(songsMap);
+    final String sanitizedName =
+        showName.replaceAll(RegExp(r'[\.\\\*\:\"\?#/;\|]'), '').trim();
+    final String safeShowName =
+        sanitizedName.isEmpty ? 'Playlist' : sanitizedName;
     File file;
     try {
-      file = await File('$dirPath/$showName.json').create(recursive: true);
+      file = await File('$dirPath/$safeShowName.json').create(recursive: true);
     } catch (e) {
       Logger.root.severe(
         'Error creating export playlist file. Retrying with file access permission',
@@ -62,12 +66,12 @@ Future<void> exportPlaylist(
       await [
         Permission.manageExternalStorage,
       ].request();
-      file = await File('$dirPath/$showName.json').create(recursive: true);
+      file = await File('$dirPath/$safeShowName.json').create(recursive: true);
     }
     await file.writeAsString(songs);
     ShowSnackBar().showSnackBar(
       context,
-      '${AppLocalizations.of(context)!.exported} "$showName"',
+      '${AppLocalizations.of(context)!.exported} "$safeShowName"',
     );
   } catch (e) {
     Logger.root.severe('Error while exporting playlist', e);
@@ -143,11 +147,13 @@ Future<List> importFilePlaylist(
     Logger.root.severe('Got playlist path', temp);
     final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
     String playlistName = temp
+        .replaceAll('\\', '/')
         .split('/')
         .last
         .replaceAll('.json', '')
         .replaceAll(avoid, '')
-        .replaceAll('  ', ' ');
+        .replaceAll('  ', ' ')
+        .trim();
 
     final File file = File(temp);
     final String finString = await file.readAsString();
@@ -161,7 +167,25 @@ Future<List> importFilePlaylist(
       return playlistNames;
     }
     final dynamic decoded = json.decode(finString);
-    if (decoded is! Map || decoded.isEmpty) {
+    final Map songsMap = {};
+    if (decoded is Map) {
+      for (final entry in decoded.entries) {
+        if (entry.value is Map) {
+          final String key =
+              (entry.value as Map)['id']?.toString() ?? entry.key.toString();
+          songsMap[key] = entry.value;
+        }
+      }
+    } else if (decoded is List) {
+      for (int i = 0; i < decoded.length; i++) {
+        final item = decoded[i];
+        if (item is Map) {
+          final String key = item['id']?.toString() ?? i.toString();
+          songsMap[key] = item;
+        }
+      }
+    }
+    if (songsMap.isEmpty) {
       if (context != null) {
         ShowSnackBar().showSnackBar(
           context,
@@ -170,7 +194,6 @@ Future<List> importFilePlaylist(
       }
       return playlistNames;
     }
-    final Map songsMap = decoded;
     final List songs = songsMap.values.toList();
     // playlistBox.put(mediaItem.id.toString(), info);
     // Hive.box(play)

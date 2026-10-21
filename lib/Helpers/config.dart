@@ -21,6 +21,20 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
 class MyTheme with ChangeNotifier {
+  MyTheme() {
+    if (Hive.isBoxOpen('settings')) {
+      final Box settingsBox = Hive.box('settings');
+      if (!settingsBox.containsKey('themeColor')) {
+        settingsBox.put('themeColor', 'Purple');
+        accentColor = 'Purple';
+      }
+      if (!settingsBox.containsKey('colorHue')) {
+        settingsBox.put('colorHue', 400);
+        colorHue = 400;
+      }
+    }
+  }
+
   bool _isDark =
       Hive.box('settings').get('darkMode', defaultValue: true) as bool;
 
@@ -28,7 +42,7 @@ class MyTheme with ChangeNotifier {
       Hive.box('settings').get('useSystemTheme', defaultValue: false) as bool;
 
   String accentColor =
-      Hive.box('settings').get('themeColor', defaultValue: 'Teal') as String;
+      Hive.box('settings').get('themeColor', defaultValue: 'Purple') as String;
   String canvasColor =
       Hive.box('settings').get('canvasColor', defaultValue: 'Grey') as String;
   String cardColor =
@@ -140,7 +154,8 @@ class MyTheme with ChangeNotifier {
     _useSystemTheme =
         settingsBox.get('useSystemTheme', defaultValue: false) as bool;
 
-    accentColor = settingsBox.get('themeColor', defaultValue: 'Teal') as String;
+    accentColor =
+        settingsBox.get('themeColor', defaultValue: 'Purple') as String;
     canvasColor =
         settingsBox.get('canvasColor', defaultValue: 'Grey') as String;
     cardColor = settingsBox.get('cardColor', defaultValue: 'Grey900') as String;
@@ -223,7 +238,7 @@ class MyTheme with ChangeNotifier {
         return Colors.white;
 
       default:
-        return _isDark ? Colors.tealAccent[400]! : Colors.lightBlueAccent[400]!;
+        return _isDark ? Colors.purpleAccent[400]! : Colors.purpleAccent[400]!;
     }
   }
 
@@ -311,7 +326,7 @@ class MyTheme with ChangeNotifier {
         return Colors.white;
 
       default:
-        return _isDark ? Colors.tealAccent[400]! : Colors.lightBlueAccent[400]!;
+        return _isDark ? Colors.purpleAccent[400]! : Colors.purpleAccent[400]!;
     }
   }
 

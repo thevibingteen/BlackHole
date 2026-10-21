@@ -602,32 +602,6 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                                       [
                                                                       idx] as Map,
                                                                 );
-                                                                if (itemType ==
-                                                                    'Song') {
-                                                                  final Map
-                                                                      response2 =
-                                                                      await YtMusicService()
-                                                                          .getSongData(
-                                                                    videoId: section['items'][idx]
-                                                                            [
-                                                                            'id']
-                                                                        .toString(),
-                                                                  );
-                                                                  if (response !=
-                                                                          null &&
-                                                                      response2[
-                                                                              'image'] !=
-                                                                          null) {
-                                                                    response[
-                                                                        'image'] = response2[
-                                                                            'image'] ??
-                                                                        response[
-                                                                            'image'];
-                                                                  }
-                                                                }
-                                                                setState(() {
-                                                                  done = true;
-                                                                });
                                                                 if (response !=
                                                                     null) {
                                                                   PlayerInvoke
@@ -639,6 +613,34 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                                     isOffline:
                                                                         false,
                                                                   );
+                                                                }
+                                                                setState(() {
+                                                                  done = true;
+                                                                });
+                                                                if (itemType ==
+                                                                        'Song' &&
+                                                                    response !=
+                                                                        null) {
+                                                                  YtMusicService()
+                                                                      .getSongData(
+                                                                    videoId: section['items'][idx]
+                                                                            [
+                                                                            'id']
+                                                                        .toString(),
+                                                                  )
+                                                                      .then(
+                                                                          (response2) {
+                                                                    if (response2[
+                                                                            'image'] !=
+                                                                        null) {
+                                                                      response[
+                                                                          'image'] = response2[
+                                                                              'image'] ??
+                                                                          response[
+                                                                              'image'];
+                                                                    }
+                                                                  }).catchError(
+                                                                          (_) {});
                                                                 }
                                                                 response == null
                                                                     ? ShowSnackBar()
