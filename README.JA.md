@@ -16,6 +16,20 @@
 [![GitHub stars](https://img.shields.io/github/stars/thevibingteen/BlackHole.svg?style=social&label=Star)](https://github.com/thevibingteen/BlackHole)
 [![GitHub forks](https://img.shields.io/github/forks/thevibingteen/BlackHole.svg?style=social&label=Forks)](https://github.com/thevibingteen/BlackHole/network/members)
 
+<p align="center">
+  <b>🌐 Readme Languages:</b>
+  <a href="README.md">English</a> •
+  <a href="README.BE.md">Беларуская</a> •
+  <a href="README.ES.md">Español</a> •
+  <a href="README.FR.md">Français</a> •
+  <a href="README.ID.md">Bahasa Indonesia</a> •
+  <a href="README.JA.md">日本語</a> •
+  <a href="README.PT.md">Português</a> •
+  <a href="README.RU.md">Русский</a> •
+  <a href="README.TR.md">Türkçe</a>
+</p>
+
+
 ## ダウンロード
 
 [<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"
@@ -36,13 +50,13 @@
 
 ## 翻訳
 
-- [English :uk:](/README.md)
-- [Spanish :es:](/README.ES.md)
-- [Russian :ru:](/README.RU.md)
-- [French :fr:](/README.FR.md)
-- [Portuguese :brazil:](/README.PT.md)
-- [Belarusian :belarus:](/README.BE.md)
-- [Indonesian :indonesia:](/README.ID.md)
+- [English :uk:](README.md)
+- [Spanish :es:](README.ES.md)
+- [Russian :ru:](README.RU.md)
+- [French :fr:](README.FR.md)
+- [Portuguese :brazil:](README.PT.md)
+- [Belarusian :belarus:](README.BE.md)
+- [Indonesian :indonesia:](README.ID.md)
 
 [Weblateでアプリを翻訳](https://hosted.weblate.org/projects/blackhole/translations/)
 

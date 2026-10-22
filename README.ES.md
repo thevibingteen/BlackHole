@@ -16,6 +16,20 @@ Un increible reproductor de música basado en Flutter
 [![GitHub stars](https://img.shields.io/github/stars/thevibingteen/BlackHole.svg?style=social&label=Star)](https://github.com/thevibingteen/BlackHole)
 [![GitHub forks](https://img.shields.io/github/forks/thevibingteen/BlackHole.svg?style=social&label=Forks)](https://github.com/thevibingteen/BlackHole/network/members)
 
+<p align="center">
+  <b>🌐 Readme Languages:</b>
+  <a href="README.md">English</a> •
+  <a href="README.BE.md">Беларуская</a> •
+  <a href="README.ES.md">Español</a> •
+  <a href="README.FR.md">Français</a> •
+  <a href="README.ID.md">Bahasa Indonesia</a> •
+  <a href="README.JA.md">日本語</a> •
+  <a href="README.PT.md">Português</a> •
+  <a href="README.RU.md">Русский</a> •
+  <a href="README.TR.md">Türkçe</a>
+</p>
+
+
 ## Descargar
 
 [<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png"
@@ -36,11 +50,11 @@ Un increible reproductor de música basado en Flutter
 
 ## Traducciones
 
-- [English :uk:](/README.md)
-- [Russian :ru:](/README.RU.md)
-- [Japanese :jp:](/README.JA.md)
-- [Belarusian :belarus:](/README.BE.md)
-- [Indonesian :indonesia:](/README.ID.md)
+- [English :uk:](README.md)
+- [Russian :ru:](README.RU.md)
+- [Japanese :jp:](README.JA.md)
+- [Belarusian :belarus:](README.BE.md)
+- [Indonesian :indonesia:](README.ID.md)
 
 Gracias a [Euri](https://github.com/EuriNaiz) por esta traducción
 

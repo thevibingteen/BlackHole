@@ -12,6 +12,19 @@ An open-source Flutter music player for online and offline music discovery and p
 
 ⭐ If you enjoy using BlackHole or find this project helpful, please consider starring the repository!
 
+<p align="center">
+  <b>🌐 Readme Languages:</b>
+  <a href="README.md">English</a> •
+  <a href="README.BE.md">Беларуская</a> •
+  <a href="README.ES.md">Español</a> •
+  <a href="README.FR.md">Français</a> •
+  <a href="README.ID.md">Bahasa Indonesia</a> •
+  <a href="README.JA.md">日本語</a> •
+  <a href="README.PT.md">Português</a> •
+  <a href="README.RU.md">Русский</a> •
+  <a href="README.TR.md">Türkçe</a>
+</p>
+
 ---
 
 ## Project Overview & Identity
@@ -106,6 +119,27 @@ This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/Blac
    ```bash
    flutter run
    ```
+
+---
+
+## 🌐 Translations / Other Languages
+
+BlackHole documentation is available in multiple languages. Select any language below to view the translated README:
+
+| Flag | Language | Native Name | File Link |
+| :---: | :--- | :--- | :--- |
+| 🇬🇧 | **English** | English | [README.md](README.md) *(Default / Canonical)* |
+| 🇧🇾 | **Belarusian** | Беларуская | [README.BE.md](README.BE.md) |
+| 🇪🇸 | **Spanish** | Español | [README.ES.md](README.ES.md) |
+| 🇫🇷 | **French** | Français | [README.FR.md](README.FR.md) |
+| 🇮🇩 | **Indonesian** | Bahasa Indonesia | [README.ID.md](README.ID.md) |
+| 🇯🇵 | **Japanese** | 日本語 | [README.JA.md](README.JA.md) |
+| 🇧🇷 | **Portuguese** | Português (Brasil) | [README.PT.md](README.PT.md) |
+| 🇷🇺 | **Russian** | Русский | [README.RU.md](README.RU.md) |
+| 🇹🇷 | **Turkish** | Türkçe | [README.TR.md](README.TR.md) |
+
+> [!NOTE]
+> The primary English [README.md](README.md) is the canonical reference containing the most up-to-date build instructions, feature list, CI status, and legal policies. Community translations are maintained with assistance from open-source contributors.
 
 ---
 
