@@ -4,13 +4,17 @@
 
 Музычны прайгравальнік з адкрытым зыходным кодам для ўсіх вашых патрэб!
 
-[![made-with-flutter](https://img.shields.io/badge/Made%20with-Flutter-1f425f.svg)](https://flutter.dev/) ![Release](https://img.shields.io/github/v/release/Sangwan5688/BlackHole) ![Downloads](https://img.shields.io/github/downloads/Sangwan5688/BlackHole/total)
-[![Build](https://github.com/Sangwan5688/BlackHole/actions/workflows/flutter.yml/badge.svg)](https://github.com/Sangwan5688/BlackHole/actions/workflows/flutter.yml)
-[![Translation-Status](https://hosted.weblate.org/widgets/blackhole/-/translations/svg-badge.svg)](https://hosted.weblate.org/engage/blackhole/)
+> [!NOTE]
+> **Community Maintenance & Up-to-Date Documentation Notice**  
+> This repository is a community-maintained fork and ongoing revival of BlackHole by [@thevibingteen](https://github.com/thevibingteen), building upon the original work of [Ankit Sangwan](https://github.com/Sangwan5688) and open-source contributors.
+> 
+> * For current build instructions, verified features, automated test commands, and active legal policies, please refer to the primary English documentation: [README.md](README.md).
+> * Legal & Policy References: [LICENSE](LICENSE) | [DISCLAIMER.md](DISCLAIMER.md) | [TERMS_OF_USE.md](TERMS_OF_USE.md) | [PRIVACY_POLICY.md](PRIVACY_POLICY.md) | [SECURITY.md](SECURITY.md)
 
-### Не забудзьцеся паставіць :star: у рэпазіторыі
-
-[![GitHub stars](https://img.shields.io/github/stars/Sangwan5688/BlackHole.svg?style=social&label=Star)](https://github.com//Sangwan5688/BlackHole) ![GitHub forks](https://img.shields.io/github/forks/Sangwan5688/BlackHole.svg?style=social&label=Forks) ![GitHub followers](https://img.shields.io/github/followers/Sangwan5688.svg?style=social&label=Follow)
+[![Made with Flutter](https://img.shields.io/badge/Made%20with-Flutter-1f425f.svg)](https://flutter.dev/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/thevibingteen/BlackHole.svg?style=social&label=Star)](https://github.com/thevibingteen/BlackHole)
+[![GitHub forks](https://img.shields.io/github/forks/thevibingteen/BlackHole.svg?style=social&label=Forks)](https://github.com/thevibingteen/BlackHole/network/members)
 
 ## Спампаваць
 
