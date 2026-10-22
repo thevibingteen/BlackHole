@@ -462,10 +462,10 @@ class _HomePageState extends State<HomePage> {
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(5, 30, 5, 20),
                           child: Center(
-                            child: Text(
-                              AppLocalizations.of(context)!.madeBy,
+                            child: const Text(
+                              'Made with ❤️ by Black Hole',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(fontSize: 12),
                             ),
                           ),
                         ),
