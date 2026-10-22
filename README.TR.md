@@ -9,7 +9,7 @@ Tüm ihtiyaçlarınız için bir Açık Kaynaklı Müzik Çalar Uygulaması!
 > This repository is a community-maintained fork and ongoing revival of BlackHole by [@thevibingteen](https://github.com/thevibingteen), building upon the original work of [Ankit Sangwan](https://github.com/Sangwan5688) and open-source contributors.
 > 
 > * For current build instructions, verified features, automated test commands, and active legal policies, please refer to the primary English documentation: [README.md](README.md).
-> * Legal & Policy References: [LICENSE](LICENSE) | [DISCLAIMER.md](DISCLAIMER.md) | [TERMS_OF_USE.md](TERMS_OF_USE.md) | [PRIVACY_POLICY.md](PRIVACY_POLICY.md) | [SECURITY.md](SECURITY.md)
+> * Legal & Policy References: [![License: GPL v3](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square&logo=gnu)](LICENSE) [![Disclaimer](https://img.shields.io/badge/Legal-Disclaimer-orange?style=flat-square)](DISCLAIMER.md) [![Terms of Use](https://img.shields.io/badge/Terms-Of_Use-blueviolet?style=flat-square)](TERMS_OF_USE.md) [![Privacy Policy](https://img.shields.io/badge/Privacy-Policy-green?style=flat-square)](PRIVACY_POLICY.md) [![Security Policy](https://img.shields.io/badge/Security-Policy-red?style=flat-square)](SECURITY.md)
 
 [![Made with Flutter](https://img.shields.io/badge/Made%20with-Flutter-1f425f.svg)](https://flutter.dev/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
@@ -40,7 +40,7 @@ Tüm ihtiyaçlarınız için bir Açık Kaynaklı Müzik Çalar Uygulaması!
      height="90">](https://github.com/Sangwan5688/BlackHole/releases)
 [<img src="get_telegram.png"
      alt="Join Telegram Channel"
-     height="90">](https://t.me/blackhole_official)
+     height="90">](https://t.me/blackholerevived)
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
      alt="Get it on F-Droid"
      height="90">](https://f-droid.org/packages/com.shadow.blackhole/)
@@ -158,11 +158,19 @@ Karşılaşabileceğiniz bazı [yaygın sorunlara](https://github.com/Sangwan568
 
 ## Beta Sürümlerini test etmek ister misiniz? Yardıma mı ihtiyacınız var?
 
-Herhangi bir sorunuz varsa veya bir konuda yardıma ihtiyacınız varsa [Telegram Kanalımıza](https://t.me/blackhole_official) veya [Telegram Grubumuza](https://t.me/joinchat/fHDC1AWnOhw0ZmI9) katılabilirsiniz. yanı sıra projenin beta güncellemelerini almak için.
+Herhangi bir sorunuz varsa veya bir konuda yardıma ihtiyacınız varsa [Telegram Kanalımıza](https://t.me/blackholerevived) veya [Telegram Grubumuza](https://t.me/+_9wHWiHi1MdmMGM1) katılabilirsiniz. yanı sıra projenin beta güncellemelerini almak için.
 
 ## Çalışmamı beğendin mi?
 
-<a href="https://www.buymeacoffee.com/ankitsangwan" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
+<p align="center">
+  <a href="https://buymeacoffee.com/thevibingteen" target="_blank">
+    <img src="https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" height="42">
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://www.paypal.com/ncp/payment/859SMGK59Z48L" target="_blank">
+    <img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal" height="42">
+  </a>
+</p>
 
 ## Yenilikler Neler?
 

@@ -44,8 +44,16 @@ This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/Blac
 * **No Official App Store Presence**: The application is not officially published or distributed on Google Play, the Apple App Store, F-Droid, or commercial third-party app stores.
 * **Source & Testing Artifacts**: Source code is available in this repository. Automated continuous integration (CI) development and testing APK artifacts (Split-ABI: `arm64-v8a`, `armeabi-v7a`, `x86_64`) are generated via [GitHub Actions](https://github.com/thevibingteen/BlackHole/actions).
 * **Community Channels**: Project announcements, preview testing information, and community discussions are shared via Telegram:
-  * [BlackHole Revived Telegram Channel](https://t.me/blackholerevived) — Announcements and community build information.
-  * [BlackHole Telegram Group](https://t.me/+_9wHWiHi1MdmMGM1) — Discussion, feedback, and peer support.
+
+<p align="center">
+  <a href="https://t.me/blackholerevived" target="_blank">
+    <img src="https://img.shields.io/badge/Telegram_Channel-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel" height="38">
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://t.me/+_9wHWiHi1MdmMGM1" target="_blank">
+    <img src="https://img.shields.io/badge/Telegram_Group-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Group" height="38">
+  </a>
+</p>
 
 ---
 
@@ -147,13 +155,15 @@ BlackHole documentation is available in multiple languages. Select any language 
 
 Please consult our governance, compliance, and community documentation:
 
-* [Software License (GPL-3.0)](LICENSE) — Full text of the GNU General Public License v3.0.
-* [Legal & Educational-Use Disclaimer](DISCLAIMER.md) — Clarification of purpose, non-affiliation, media rights, and warranty limits.
-* [Terms of Use](TERMS_OF_USE.md) — Guidelines for responsible usage, testing, and interaction.
-* [Privacy Policy](PRIVACY_POLICY.md) — Disclosures regarding on-device data storage, device permissions, and third-party endpoints.
-* [Security Policy](SECURITY.md) — Responsible vulnerability reporting guidelines and contacts.
-* [Contributing Guidelines](CONTRIBUTING.md) — Development workflow, code standards, and pull request procedures.
-* [Code of Conduct](CODE_OF_CONDUCT.md) — Community pledge and enforcement standards based on Contributor Covenant 2.0.
+| Policy Document | Direct Access Button | Description & Scope |
+| :--- | :---: | :--- |
+| **Software License** | [![GPL v3](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge&logo=gnu)](LICENSE) | Full legal text of the GNU General Public License v3.0. |
+| **Legal Disclaimer** | [![Legal Disclaimer](https://img.shields.io/badge/Legal-Disclaimer-orange?style=for-the-badge)](DISCLAIMER.md) | Educational scope, non-affiliation, and warranty limitations. |
+| **Terms of Use** | [![Terms of Use](https://img.shields.io/badge/Terms-Of_Use-blueviolet?style=for-the-badge)](TERMS_OF_USE.md) | Guidelines for responsible usage, testing, and interaction. |
+| **Privacy Policy** | [![Privacy Policy](https://img.shields.io/badge/Privacy-Policy-green?style=for-the-badge)](PRIVACY_POLICY.md) | Disclosures on local Hive storage and third-party endpoints. |
+| **Security Policy** | [![Security Policy](https://img.shields.io/badge/Security-Policy-red?style=for-the-badge)](SECURITY.md) | Responsible vulnerability reporting instructions and contacts. |
+| **Contributing Guidelines** | [![Contributing Guidelines](https://img.shields.io/badge/Guidelines-Contributing-purple?style=for-the-badge&logo=git)](CONTRIBUTING.md) | Development workflow, code standards, and PR process. |
+| **Code of Conduct** | [![Code of Conduct](https://img.shields.io/badge/Community-Code_of_Conduct-007EC6?style=for-the-badge)](CODE_OF_CONDUCT.md) | Contributor Covenant 2.0 pledge and enforcement rules. |
 
 ---
 
@@ -170,6 +180,16 @@ BlackHole interfaces with publicly accessible third-party APIs and streaming end
 ## Sponsorship & Donations
 
 If you find this project valuable and wish to support ongoing maintenance and testing:
+
+<p align="center">
+  <a href="https://buymeacoffee.com/thevibingteen" target="_blank">
+    <img src="https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" height="42">
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://www.paypal.com/ncp/payment/859SMGK59Z48L" target="_blank">
+    <img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal" height="42">
+  </a>
+</p>
 
 * **Buy Me a Coffee**: [buymeacoffee.com/thevibingteen](https://buymeacoffee.com/thevibingteen)
 * **PayPal**: [Donate via PayPal](https://www.paypal.com/ncp/payment/859SMGK59Z48L)
