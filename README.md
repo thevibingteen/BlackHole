@@ -14,47 +14,45 @@ An open-source Flutter music player for online and offline music discovery and p
 
 ---
 
-## Project Overview
+## Project Overview & Identity
 
-**BlackHole** is a modern, high-performance, feature-packed music player application built with Flutter. It combines online streaming discovery with seamless local offline music playback, custom playlist organization, synchronized lyrics, and flexible audio customization.
+**BlackHole** is a modern, feature-packed music player application built with Flutter. It combines online streaming discovery with seamless local offline music playback, custom playlist organization, synchronized lyrics, and flexible audio customization.
 
-This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/BlackHole)) is a community-maintained modification of BlackHole. It builds upon the foundational architecture created by original author Ankit Sangwan and open-source contributors, providing stabilization, bug fixes, updated community links, and continuous build maintenance. This repository is not the original upstream project, nor does the current maintainer claim authorship of every inherited line of code.
+This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/BlackHole)) is a **community-maintained fork and ongoing revival** of BlackHole, maintained by [@thevibingteen](https://github.com/thevibingteen). It builds upon the foundational architecture originally created by [Ankit Sangwan](https://github.com/Sangwan5688) and open-source contributors, providing stabilization, bug fixes, updated community links, reproducible continuous integration, and ongoing maintenance.
 
----
-
-## Get Updates and Community Builds
-
-Follow the community channels for announcements, discussions, and build information:
-
-* Follow the [BlackHole Revived Telegram Channel](https://t.me/blackholerevived) for project updates and any community-shared build information.
-* Join the [BlackHole Telegram Group](https://t.me/+_9wHWiHi1MdmMGM1) for discussion, feedback, and community support.
-
-> **Note**: This community build series is not distributed on Google Play, the Apple App Store, F-Droid, or third-party repositories. For testing and development, you can build directly from source using the instructions below or check the Telegram community channels for shared builds.
+* **Upstream Attribution**: This repository is a derivative work and not the original upstream project. The current maintainer does not claim authorship of inherited upstream code or ownership of third-party assets. Upstream copyright notices and licenses are fully preserved in compliance with the [GNU General Public License v3.0](LICENSE).
+* **Educational & Research Purpose**: This project is maintained primarily for learning, research, Flutter architecture exploration, and community maintenance.
 
 ---
 
-## Features
+## Distribution & Build Availability
 
-* **High-Quality Streaming**: High-quality audio streaming where available (up to 320 kbps AAC from supported providers).
-* **Comprehensive Search**: Search across songs, albums, artists, and playlists from supported online catalogs and YouTube.
-* **Language-Specific Discovery**: Language-aware promoted playlists and localized Home discovery across 15+ catalog languages where available.
-* **Trending & Top Hits**: Explore trending songs and curated local and global charts (JioSaavn chart data).
-* **Artist & Genre Radios**: Infinite, continuous radio playback stations based on selected artists or genres.
-* **Favorites & Custom Playlists**: Organize your library with favorite tracks and custom user-created playlists.
-* **Multi-Source Playlist Import**: Import playlists from supported providers, including Spotify, YouTube, JioSaavn, and Deezer.
-* **JSON Playlist Import & Export**: Export your playlists to standard JSON files for backup or share them across devices.
-* **Synchronized & Static Lyrics**: Built-in lyrics display support with time-synced highlighting when available.
-* **Queue Management & Listening History**: Reorder upcoming tracks, view recently played songs, and manage playback queues effortlessly.
-* **Custom Theming & Visuals**: Rich dark mode, customizable color gradients, dynamic accent colors, and responsive support for both portrait and landscape orientations.
-* **Offline Playback & Local Downloads**: Download audio tracks with embedded ID3 metadata tags (where supported by source) and play local audio files seamlessly without an internet connection.
-* **In-App Tag Editing**: View and modify audio metadata and ID3 tags directly inside the app.
-* **YouTube Discovery & Audio Playback**: Search YouTube playlists and videos, streaming audio tracks without video overhead.
-* **Song Recommendations**: Dynamic track suggestions and autoplay recommendations based on currently playing music.
-* **Built-in Equalizer**: Built-in audio equalization to fine-tune your listening experience.
-* **Sleep Timer**: Schedule automatic playback shutoff for bedtime listening.
+* **No Commercial Distribution**: This project is maintained as a community and educational software project. The current maintainer does not operate an official paid commercial distribution channel, sell application licenses, or monetize user access.
+* **No Official App Store Presence**: The application is not officially published or distributed on Google Play, the Apple App Store, F-Droid, or commercial third-party app stores.
+* **Source & Testing Artifacts**: Source code is available in this repository. Automated continuous integration (CI) development and testing APK artifacts (Split-ABI: `arm64-v8a`, `armeabi-v7a`, `x86_64`) are generated via [GitHub Actions](https://github.com/thevibingteen/BlackHole/actions).
+* **Community Channels**: Project announcements, preview testing information, and community discussions are shared via Telegram:
+  * [BlackHole Revived Telegram Channel](https://t.me/blackholerevived) — Announcements and community build information.
+  * [BlackHole Telegram Group](https://t.me/+_9wHWiHi1MdmMGM1) — Discussion, feedback, and peer support.
+
+---
+
+## Verified Features
+
+* **High-Quality Online Streaming**: Audio streaming up to 320 kbps AAC/MP4 where provided by supported endpoints (JioSaavn catalog).
+* **YouTube Music & Video Stream Audio**: Search YouTube videos and playlists, extracting audio tracks directly for lightweight playback without video overhead.
+* **Synchronized & Plain Lyrics**: Real-time synchronized lyrics display powered by [LRCLIB](https://lrclib.net), with fallbacks to JioSaavn and Musixmatch text lyrics.
+* **Comprehensive Search & Catalog Discovery**: Search songs, albums, artists, and playlists across supported online catalogs and YouTube.
+* **Language-Specific Feed**: Localized Home discovery and promoted playlists across 15+ catalog languages (Hindi, English, Punjabi, Tamil, Telugu, and more).
+* **Trending Hits & Charts**: Explore trending tracks and curated local and global charts (JioSaavn chart data).
+* **Artist & Genre Radios**: Continuous, automated radio stations generated from selected artists or genres.
+* **Multi-Source Playlist Import**: Import public playlists from Spotify (via client-side PKCE OAuth), YouTube, JioSaavn, and Deezer.
+* **Offline Music & Local Downloads**: Download audio tracks with embedded ID3 metadata tags and album art, and index/play local audio files on device storage without internet access.
+* **In-App ID3 Tag Editing**: View and modify audio metadata and tags directly on local files.
+* **Queue Management & Listening History**: Reorder upcoming tracks, view recently played songs, and manage playback queues.
+* **Custom Theming & Visuals**: Rich dark mode, customizable color gradients, dynamic accent colors, and responsive portrait/landscape layouts.
+* **Audio Equalization & Sleep Timer**: Fine-tune listening preferences with built-in equalization and schedule automatic shutoff timers.
 * **Local Backup & Restore**: Backup and restore user settings, favorites, and playlists locally using Hive storage.
-* **Integrated Update Check**: Check for newly published repository releases directly from the Settings screen.
-* **No Subscriptions, No Ads**: Fully open-source with no subscription fees or in-app advertising.
+* **Zero Subscriptions & Zero Ads**: 100% open-source with no advertising frameworks, subscription fees, or paid tiers.
 
 ---
 
@@ -77,98 +75,75 @@ Follow the community channels for announcements, discussions, and build informat
 
 ### Prerequisites
 
-1. **Flutter SDK**: Ensure you have Flutter `>=3.0.0` installed (the CI build pipeline uses Flutter `3.10.6` stable). See the [official Flutter documentation](https://flutter.dev/docs/get-started/install) for installation details.
-2. **Java Development Kit (JDK)**: JDK 11 (e.g. Eclipse Temurin 11).
+1. **Flutter SDK**: `>=3.0.0` (The automated GitHub Actions build pipeline is tested and verified on Flutter `3.10.6` stable). See the [official Flutter setup guide](https://flutter.dev/docs/get-started/install).
+2. **Java Development Kit (JDK)**: JDK 11 (e.g., Eclipse Temurin 11).
 3. **Android SDK**: Android SDK platform tools with API Level 33+.
 
-### Build Steps
+### Step-by-Step Instructions
 
-1. Clone the repository:
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/thevibingteen/BlackHole.git
    cd BlackHole
    ```
 
-2. Switch to the active development branch:
+2. **Verify you are on the default branch**:
    ```bash
-   git checkout ui-reference-build/blackhole-main
+   git checkout main
    ```
 
-3. Install project dependencies:
+3. **Install project dependencies**:
    ```bash
    flutter pub get
    ```
 
-4. Run the automated test suite:
+4. **Run the automated test suite**:
    ```bash
    flutter test test/backend_test.dart test/widget_test.dart
    ```
 
-5. Launch the application:
+5. **Launch the application on a connected device or emulator**:
    ```bash
    flutter run
    ```
 
 ---
 
-## Contributing
+## Project Policies & Governance
 
-Contributions are welcome! Whether reporting a bug, proposing a new feature, or submitting code improvements, please read our [Contributing Guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before getting started.
+Please consult our governance, compliance, and community documentation:
 
-* Submit pull requests against the `ui-reference-build/blackhole-main` branch.
-* Ensure code adheres to `dart format` and all tests pass with `flutter test`.
-
----
-
-## Issues & Support
-
-* If you encounter a bug or have a suggestion, please check the [Issue Tracker](https://github.com/thevibingteen/BlackHole/issues) to see if it has already been addressed, or open a new issue.
-* **Email Support**: [thevibingteen@gmail.com](mailto:thevibingteen@gmail.com)
-* **Instagram**: [thevibingteen](https://www.instagram.com/thevibingteen)
+* [Software License (GPL-3.0)](LICENSE) — Full text of the GNU General Public License v3.0.
+* [Legal & Educational-Use Disclaimer](DISCLAIMER.md) — Clarification of purpose, non-affiliation, media rights, and warranty limits.
+* [Terms of Use](TERMS_OF_USE.md) — Guidelines for responsible usage, testing, and interaction.
+* [Privacy Policy](PRIVACY_POLICY.md) — Disclosures regarding on-device data storage, device permissions, and third-party endpoints.
+* [Security Policy](SECURITY.md) — Responsible vulnerability reporting guidelines and contacts.
+* [Contributing Guidelines](CONTRIBUTING.md) — Development workflow, code standards, and pull request procedures.
+* [Code of Conduct](CODE_OF_CONDUCT.md) — Community pledge and enforcement standards based on Contributor Covenant 2.0.
 
 ---
 
-## Community & Beta Support
+## Third-Party Services Disclaimer
 
-Stay connected and test preview updates with the community:
+BlackHole interfaces with publicly accessible third-party APIs and streaming endpoints (such as JioSaavn, YouTube, YouTube Music, Spotify, Deezer, and LRCLIB).
 
-* **Telegram Group**: [Join the BlackHole Telegram Group](https://t.me/+_9wHWiHi1MdmMGM1)
-* **Telegram Channel**: [Follow the BlackHole Revived Telegram Channel](https://t.me/blackholerevived)
+* These services are independent entities with their own terms of service, rate limits, and policies.
+* The availability, performance, and formatting of third-party features depend on external service continuity and cannot be guaranteed.
+* BlackHole is **not** endorsed by, sponsored by, or officially affiliated with any of these third-party platforms.
 
 ---
 
 ## Sponsorship & Donations
 
-If you appreciate the work being done on this project and want to support ongoing maintenance:
+If you find this project valuable and wish to support ongoing maintenance and testing:
 
-* **Buy Me a Coffee**: [Support the project on Buy Me a Coffee](https://buymeacoffee.com/thevibingteen)
-* **PayPal**: [Donate or sponsor the project using PayPal](https://www.paypal.com/ncp/payment/859SMGK59Z48L)
-
----
-
-## License & Acknowledgements
-
-* **License**: This project is licensed under the [GNU General Public License v3.0](LICENSE).
-* **Original Author**: Special thanks and credit to [Ankit Sangwan](https://github.com/Sangwan5688) and the original upstream contributors for authoring the initial BlackHole codebase.
-* **Open-Source Community**: Thank you to the Flutter team, Dart community, and authors of the third-party libraries that make this application possible.
+* **Buy Me a Coffee**: [buymeacoffee.com/thevibingteen](https://buymeacoffee.com/thevibingteen)
+* **PayPal**: [Donate via PayPal](https://www.paypal.com/ncp/payment/859SMGK59Z48L)
 
 ---
 
-## Privacy, Safety & Educational-Use Disclaimer
+## Acknowledgements
 
-BlackHole is an open-source educational and community development project created for personal learning, experimentation, and research.
-
-* **Content Ownership**: BlackHole does not host, store, index, or own any audio tracks, music files, artwork, or stream content. All media accessible through the application belongs to its respective copyright owners and providers.
-* **User Responsibility**: Users of this software are solely responsible for ensuring that their playback, downloading, and usage comply with applicable laws and the terms of service of third-party media sources.
-* **No Infringement Endorsement**: This project does not endorse, encourage, or facilitate copyright infringement.
-* **License Preservation**: This educational disclaimer does not limit, waive, or contradict any terms or rights under the GNU General Public License v3.0 (GPL v3). The complete GPL v3 license remains in full effect.
-
----
-
-## Third-Party Services & API Disclaimer
-
-BlackHole interfaces with publicly accessible third-party APIs and content services (such as JioSaavn, YouTube, Spotify, and Deezer) to provide search, metadata, and streaming capabilities.
-
-* These third-party services are independent entities with their own terms of service, rate limits, and policies.
-* The availability, performance, and functionality of third-party features depend on external service continuity and cannot be guaranteed.
-* BlackHole is not affiliated with, endorsed by, or sponsored by any of these third-party services.
+* **Original Upstream Author**: Sincere credit and thanks to [Ankit Sangwan](https://github.com/Sangwan5688) for creating the original BlackHole music player.
+* **Contributors**: Gratitude to all open-source developers who have contributed patches, translations, and issue reports.
+* **Ecosystem**: Special thanks to the Flutter team, Dart community, and authors of the open-source packages that power this application.
