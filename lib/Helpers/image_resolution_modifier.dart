@@ -20,11 +20,66 @@
 String getImageUrl(String? imageUrl, {String quality = 'high'}) {
   if (imageUrl == null) return '';
   String url = imageUrl.trim();
+  if (url.isEmpty) return '';
   if (url.startsWith('//')) {
     url = 'https:$url';
   } else if (url.startsWith('http:')) {
     url = url.replaceFirst('http:', 'https:');
   }
+
+  // Handle YouTube / Google CDN images (e.g. lh3.googleusercontent.com, yt3.ggpht.com)
+  if (url.contains('googleusercontent.com') || url.contains('ggpht.com')) {
+    switch (quality) {
+      case 'high':
+        url = url
+            .replaceAll(RegExp(r'=w\d+-h\d+'), '=w544-h544')
+            .replaceAll(RegExp(r'=s\d+'), '=s544');
+        break;
+      case 'medium':
+        url = url
+            .replaceAll(RegExp(r'=w\d+-h\d+'), '=w226-h226')
+            .replaceAll(RegExp(r'=s\d+'), '=s226');
+        break;
+      case 'low':
+        url = url
+            .replaceAll(RegExp(r'=w\d+-h\d+'), '=w120-h120')
+            .replaceAll(RegExp(r'=s\d+'), '=s120');
+        break;
+      default:
+        url = url
+            .replaceAll(RegExp(r'=w\d+-h\d+'), '=w544-h544')
+            .replaceAll(RegExp(r'=s\d+'), '=s544');
+    }
+  }
+
+  // Handle YouTube standard video thumbnails (i.ytimg.com / img.youtube.com)
+  if (url.contains('ytimg.com') || url.contains('youtube.com')) {
+    switch (quality) {
+      case 'high':
+        url = url
+            .replaceAll('/default.jpg', '/hqdefault.jpg')
+            .replaceAll('/mqdefault.jpg', '/hqdefault.jpg');
+        break;
+      case 'medium':
+        url = url
+            .replaceAll('/default.jpg', '/mqdefault.jpg')
+            .replaceAll('/hqdefault.jpg', '/mqdefault.jpg')
+            .replaceAll('/maxresdefault.jpg', '/mqdefault.jpg');
+        break;
+      case 'low':
+        url = url
+            .replaceAll('/hqdefault.jpg', '/default.jpg')
+            .replaceAll('/mqdefault.jpg', '/default.jpg')
+            .replaceAll('/maxresdefault.jpg', '/default.jpg');
+        break;
+      default:
+        url = url
+            .replaceAll('/default.jpg', '/hqdefault.jpg')
+            .replaceAll('/mqdefault.jpg', '/hqdefault.jpg');
+    }
+  }
+
+  // Handle JioSaavn and generic dimensions (e.g. 50x50, 150x150, 500x500)
   switch (quality) {
     case 'high':
       return url

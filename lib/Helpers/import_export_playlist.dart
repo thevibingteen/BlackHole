@@ -63,9 +63,9 @@ Future<void> exportPlaylist(
       Logger.root.severe(
         'Error creating export playlist file. Retrying with file access permission',
       );
-      await [
-        Permission.manageExternalStorage,
-      ].request();
+      if (Platform.isAndroid) {
+        await Permission.manageExternalStorage.request();
+      }
       file = await File('$dirPath/$safeShowName.json').create(recursive: true);
     }
     await file.writeAsString(songs);
@@ -156,6 +156,25 @@ Future<List> importFilePlaylist(
         .trim();
 
     final File file = File(temp);
+    if (!await file.exists() || await file.length() == 0) {
+      if (context != null) {
+        ShowSnackBar().showSnackBar(
+          context,
+          '${AppLocalizations.of(context)!.failedImport}\nError: File does not exist or is empty',
+        );
+      }
+      return playlistNames;
+    }
+    if (await file.length() > 20 * 1024 * 1024) {
+      if (context != null) {
+        ShowSnackBar().showSnackBar(
+          context,
+          '${AppLocalizations.of(context)!.failedImport}\nError: File exceeds maximum allowed size (20MB)',
+        );
+      }
+      return playlistNames;
+    }
+
     final String finString = await file.readAsString();
     if (finString.trim().isEmpty) {
       if (context != null) {
