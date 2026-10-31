@@ -129,6 +129,12 @@ bool isPathWithinRoot(String rootPath, String candidatePath) {
       return false;
     }
 
+    // Reject Windows drive paths on non-Windows host environments
+    if (RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(candidatePath) &&
+        !Platform.isWindows) {
+      return false;
+    }
+
     // 2. Canonicalize the root directory
     final Directory rootDir = Directory(rootPath);
     final String canonicalRoot = rootDir.existsSync()

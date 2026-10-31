@@ -212,9 +212,9 @@ void main() {
         'Android styles.xml declares windowLayoutInDisplayCutoutMode shortEdges',
         () {
       final File lightStyles =
-          File(r'android\app\src\main\res\values\styles.xml');
+          File('android/app/src/main/res/values/styles.xml');
       final File darkStyles =
-          File(r'android\app\src\main\res\values-night\styles.xml');
+          File('android/app/src/main/res/values-night/styles.xml');
 
       expect(lightStyles.existsSync(), isTrue);
       expect(darkStyles.existsSync(), isTrue);
