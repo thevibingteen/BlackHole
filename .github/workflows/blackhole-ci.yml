@@ -1,0 +1,85 @@
+name: BlackHole CI
+
+on:
+  push:
+    branches:
+      - main
+      - maintenance/build-compatibility-upgrade
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "17"
+  FLUTTER_VERSION: "3.47.7"
+
+jobs:
+  validate:
+    name: Lint, Analyze and Test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Verify repository hygiene and security
+        run: |
+          echo "=== 1. Checking git diff formatting ==="
+          git diff --check
+
+          echo "=== 2. Verifying no sensitive signing files or binaries are tracked ==="
+          FORBIDDEN=$(git ls-files | grep -E '(\.jks$|\.keystore$|\.p12$|key\.properties$|\.apk$|\.aab$)' || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "ERROR: Forbidden sensitive or binary files found in Git tree:"
+            echo "$FORBIDDEN"
+            exit 1
+          fi
+          echo "Repository cleanliness check PASSED: No forbidden files tracked."
+
+      - name: Setup Java
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve dependencies
+        run: |
+          flutter pub get
+          python3 -c "
+          import json, os
+          path = '.dart_tool/package_config.json'
+          if os.path.exists(path):
+              with open(path, 'r', encoding='utf-8') as f:
+                  cfg = json.load(f)
+              if 'flutter_gen' not in [p['name'] for p in cfg['packages']]:
+                  cfg['packages'].append({
+                      'name': 'flutter_gen',
+                      'rootUri': 'flutter_gen',
+                      'packageUri': '.',
+                      'languageVersion': '2.12'
+                  })
+                  with open(path, 'w', encoding='utf-8') as f:
+                      json.dump(cfg, f, indent=2)
+                  print('Configured synthetic flutter_gen in package_config.json')
+          "
+
+      - name: Run static analysis
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings lib test
+
+      - name: Run automated test suite
+        run: |
+          flutter test --reporter expanded

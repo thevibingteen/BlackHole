@@ -1,0 +1,257 @@
+name: BlackHole Android Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name (e.g. v1.15.9)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+env:
+  JAVA_VERSION: "17"
+  FLUTTER_VERSION: "3.47.7"
+
+jobs:
+  build_release:
+    name: Build Signed Architecture-Specific APKs
+    runs-on: ubuntu-24.04
+    environment: production-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Determine version tag
+        id: version_tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building BlackHole release for tag: $TAG (version: $VERSION)"
+
+      - name: Setup Java
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Setup Android Build Tools
+        run: |
+          echo "Verifying apksigner availability..."
+          which apksigner || echo "Using Android SDK apksigner"
+
+      - name: Configure Production Signing Key
+        id: sign_config
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: Required production signing secrets are missing!"
+            echo "Please configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD in environment 'production-release'."
+            exit 1
+          fi
+
+          KEYSTORE_DIR="$RUNNER_TEMP/keystores"
+          mkdir -p "$KEYSTORE_DIR"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_DIR/release.keystore"
+
+          cat <<EOF > android/key.properties
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=$KEYSTORE_DIR/release.keystore
+          EOF
+
+          echo "Production signing configuration established successfully."
+
+      - name: Resolve dependencies
+        run: |
+          flutter pub get
+          python3 -c "
+          import json, os
+          path = '.dart_tool/package_config.json'
+          if os.path.exists(path):
+              with open(path, 'r', encoding='utf-8') as f:
+                  cfg = json.load(f)
+              if 'flutter_gen' not in [p['name'] for p in cfg['packages']]:
+                  cfg['packages'].append({
+                      'name': 'flutter_gen',
+                      'rootUri': 'flutter_gen',
+                      'packageUri': '.',
+                      'languageVersion': '2.12'
+                  })
+                  with open(path, 'w', encoding='utf-8') as f:
+                      json.dump(cfg, f, indent=2)
+                  print('Configured synthetic flutter_gen in package_config.json')
+          "
+
+      - name: Run verification test suite
+        run: |
+          flutter test --reporter expanded
+
+      - name: Build split-per-ABI release APKs
+        run: |
+          flutter build apk --release --split-per-abi
+
+      - name: Verify and package architecture-specific APKs
+        id: package_apks
+        run: |
+          VERSION="${{ steps.version_tag.outputs.VERSION }}"
+          SRC_DIR="build/app/outputs/flutter-apk"
+
+          echo "=== Inspecting Flutter build outputs ==="
+          ls -la "$SRC_DIR"
+
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            SRC_APK="$SRC_DIR/app-$ABI-release.apk"
+            if [ ! -f "$SRC_APK" ]; then
+              echo "ERROR: Missing expected APK for architecture $ABI: $SRC_APK"
+              exit 1
+            fi
+            DEST_APK="BlackHole-v${VERSION}-${ABI}.apk"
+            cp "$SRC_APK" "$DEST_APK"
+            echo "Successfully staged $DEST_APK (ABI: $ABI)"
+          done
+
+      - name: Verify APK Signatures with apksigner
+        run: |
+          echo "=== Verifying APK signatures and certificates ==="
+          for apk in BlackHole-v*-*.apk; do
+            echo "--- Verifying $apk ---"
+            apksigner verify --print-certs "$apk"
+          done
+
+      - name: Generate Checksums and Release Manifest
+        run: |
+          echo "=== Generating SHA256SUMS.txt ==="
+          sha256sum BlackHole-v*-*.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+          echo "=== Generating release-manifest.json ==="
+          python3 -c "
+          import json, os, hashlib, time
+          from datetime import datetime, timezone
+
+          version = '${{ steps.version_tag.outputs.VERSION }}'
+          tag = '${{ steps.version_tag.outputs.TAG }}'
+          commit = '${{ github.sha }}'
+
+          files = {}
+          for f in sorted(os.listdir('.')):
+              if f.startswith('BlackHole-v') and f.endswith('.apk'):
+                  size = os.path.getsize(f)
+                  with open(f, 'rb') as fp:
+                      h = hashlib.sha256(fp.read()).hexdigest()
+                  abi = f.split('-')[-1].replace('.apk', '')
+                  files[f] = {
+                      'architecture': abi,
+                      'byte_size': size,
+                      'sha256': h
+                  }
+
+          manifest = {
+              'project': 'BlackHole',
+              'application_id': 'com.shadow.blackhole',
+              'version': version,
+              'tag': tag,
+              'git_commit': commit,
+              'build_timestamp_utc': datetime.now(timezone.utc).isoformat(),
+              'artifacts': files
+          }
+
+          with open('release-manifest.json', 'w', encoding='utf-8') as out:
+              json.dump(manifest, out, indent=2)
+          "
+          cat release-manifest.json
+
+      - name: Cleanup sensitive signing credentials
+        if: always()
+        run: |
+          echo "Securely cleaning up temporary signing keys and properties..."
+          rm -f android/key.properties
+          rm -rf "$RUNNER_TEMP/keystores"
+          echo "Cleanup complete."
+
+      - name: Prepare Release Notes
+        run: |
+          TAG="${{ steps.version_tag.outputs.TAG }}"
+          VERSION="${{ steps.version_tag.outputs.VERSION }}"
+
+          cat <<EOF > release-notes.md
+          # BlackHole $VERSION
+
+          Production Android release with architecture-specific APK downloads, stability and security improvements, and modernized playback infrastructure.
+
+          ---
+
+          ## Architecture Selection Guide
+
+          Select the download matching your device processor:
+
+          * **\`BlackHole-v${VERSION}-arm64-v8a.apk\`** (Recommended)
+            * For modern 64-bit Android smartphones, including Xiaomi, Samsung, OnePlus, Google Pixel, Motorola, and others.
+          * **\`BlackHole-v${VERSION}-armeabi-v7a.apk\`**
+            * For older 32-bit ARM Android devices.
+          * **\`BlackHole-v${VERSION}-x86_64.apk\`**
+            * For compatible x86_64 Android emulators and devices.
+
+          > **Tip:** If unsure of your phone's architecture, connect via ADB and run:
+          > \`adb shell getprop ro.product.cpu.abi\`
+          > Most modern phones report \`arm64-v8a\`.
+
+          ---
+
+          ## Installation & Upgrade Notice
+
+          > [!IMPORTANT]
+          > **Upgrading from previous debug/test builds:**
+          > Android requires matching signing certificates for in-place updates. If you currently have an unofficial or debug-signed APK installed, back up your playlists and settings via **Settings → Backup & Restore** before installing this official release.
+
+          ---
+
+          ## Verification & Checksums
+
+          SHA-256 checksums are provided in \`SHA256SUMS.txt\` and verifiable against \`release-manifest.json\`.
+          EOF
+
+      - name: Create Draft GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version_tag.outputs.TAG }}"
+          VERSION="${{ steps.version_tag.outputs.VERSION }}"
+
+          echo "Creating Draft GitHub Release for $TAG..."
+          gh release create "$TAG" \
+            --draft \
+            --title "BlackHole $VERSION" \
+            --notes-file release-notes.md \
+            BlackHole-v${VERSION}-arm64-v8a.apk \
+            BlackHole-v${VERSION}-armeabi-v7a.apk \
+            BlackHole-v${VERSION}-x86_64.apk \
+            SHA256SUMS.txt \
+            release-manifest.json
