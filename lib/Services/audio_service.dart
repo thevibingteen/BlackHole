@@ -46,7 +46,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   bool useDown = true;
   AndroidEqualizerParameters? _equalizerParams;
 
-  late AudioPlayer? _player;
+  AudioPlayer? _player;
   late String connectionType = 'mobile';
   late String preferredQuality;
   late String preferredWifiQuality;
@@ -59,7 +59,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   late bool cacheSong;
   final _equalizer = AndroidEqualizer();
 
-  Box downloadsBox = Hive.box('downloads');
+  Box get downloadsBox => Hive.box('downloads');
   final List<String> refreshLinks = [];
   bool jobRunning = false;
 
@@ -123,6 +123,20 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
       );
 
   AudioPlayerHandlerImpl() {
+    final bool withPipeline = Hive.isBoxOpen('settings') &&
+        (Hive.box('settings').get('supportEq', defaultValue: false) as bool);
+    if (withPipeline && Platform.isAndroid) {
+      Logger.root.info('starting with eq pipeline');
+      final AudioPipeline pipeline = AudioPipeline(
+        androidAudioEffects: [
+          _equalizer,
+        ],
+      );
+      _player = AudioPlayer(audioPipeline: pipeline);
+    } else {
+      Logger.root.info('starting without eq pipeline');
+      _player = AudioPlayer();
+    }
     _init();
   }
 
@@ -134,12 +148,39 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
     if (preferredCompactNotificationButtons.length > 3) {
       preferredCompactNotificationButtons = [1, 2, 3];
     }
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+    } catch (e) {
+      Logger.root.warning('AudioSession config warning: $e');
+    }
 
-    await startService();
+    final bool withPipeline = Hive.isBoxOpen('settings') &&
+        (Hive.box('settings').get('supportEq', defaultValue: false) as bool);
+    if (withPipeline && Platform.isAndroid) {
+      try {
+        Logger.root.info('setting eq enabled');
+        final eqValue =
+            Hive.box('settings').get('setEqualizer', defaultValue: false) as bool;
+        _equalizer.setEnabled(eqValue);
 
-    await startBackgroundProcessing();
+        _equalizer.parameters.then((value) {
+          Logger.root.info('setting eq params');
+          _equalizerParams ??= value;
+
+          final List<AndroidEqualizerBand> bands = _equalizerParams!.bands;
+          bands.map(
+            (e) {
+              final gain = Hive.box('settings')
+                  .get('equalizerBand${e.index}', defaultValue: 0.5) as double;
+              _equalizerParams!.bands[e.index].setGain(gain);
+            },
+          );
+        });
+      } catch (e) {
+        Logger.root.warning('Equalizer setup warning: $e');
+      }
+    }
 
     speed.debounceTime(const Duration(milliseconds: 250)).listen((speed) {
       playbackState.add(playbackState.value.copyWith(speed: speed));
@@ -147,7 +188,9 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
 
     Logger.root.info('checking connectivity & setting quality');
 
-    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+    Connectivity().onConnectivityChanged.listen((results) {
+      final ConnectivityResult result =
+          results.isNotEmpty ? results.first : ConnectivityResult.none;
       if (result == ConnectivityResult.mobile) {
         connectionType = 'mobile';
         Logger.root.info(
@@ -318,6 +361,9 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
         .pipe(queue);
     try {
       if (loadStart) {
+        if (!Hive.isBoxOpen('cache')) {
+          await Hive.openBox('cache');
+        }
         final List lastQueueList = await Hive.box('cache')
             .get('lastQueue', defaultValue: [])?.toList() as List;
 
@@ -339,6 +385,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
             try {
               await _player!.setAudioSource(
                 _playlist,
+                preload: false,
                 // commented out due to some bug in audio_service which causes app to freeze
                 // instead manually seeking after audiosource initialised
 
@@ -651,26 +698,29 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
       );
       _player = AudioPlayer(audioPipeline: pipeline);
 
-      // Enable equalizer if used earlier
-      Logger.root.info('setting eq enabled');
-      final eqValue =
-          Hive.box('settings').get('setEqualizer', defaultValue: false) as bool;
-      _equalizer.setEnabled(eqValue);
+      try {
+        Logger.root.info('setting eq enabled');
+        final eqValue =
+            Hive.box('settings').get('setEqualizer', defaultValue: false) as bool;
+        _equalizer.setEnabled(eqValue);
 
-      // set equalizer params & bands
-      _equalizer.parameters.then((value) {
-        Logger.root.info('setting eq params');
-        _equalizerParams ??= value;
+        // set equalizer params & bands
+        _equalizer.parameters.then((value) {
+          Logger.root.info('setting eq params');
+          _equalizerParams ??= value;
 
-        final List<AndroidEqualizerBand> bands = _equalizerParams!.bands;
-        bands.map(
-          (e) {
-            final gain = Hive.box('settings')
-                .get('equalizerBand${e.index}', defaultValue: 0.5) as double;
-            _equalizerParams!.bands[e.index].setGain(gain);
-          },
-        );
-      });
+          final List<AndroidEqualizerBand> bands = _equalizerParams!.bands;
+          bands.map(
+            (e) {
+              final gain = Hive.box('settings')
+                  .get('equalizerBand${e.index}', defaultValue: 0.5) as double;
+              _equalizerParams!.bands[e.index].setGain(gain);
+            },
+          );
+        });
+      } catch (e) {
+        Logger.root.warning('Equalizer setup warning: $e');
+      }
     } else {
       Logger.root.info('starting without eq pipeline');
       _player = AudioPlayer();
@@ -732,6 +782,7 @@ class AudioPlayerHandlerImpl extends BaseAudioHandler
   }
 
   Future<void> skipToMediaItem(String id) async {
+    if (_player == null) return;
     final index = queue.value.indexWhere((item) => item.id == id);
     _player!.seek(
       Duration.zero,

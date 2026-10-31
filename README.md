@@ -92,6 +92,51 @@ This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/Blac
 
 ---
 
+## Official Downloads & Installation
+
+BlackHole is distributed exclusively through [GitHub Releases](https://github.com/thevibingteen/BlackHole/releases). Every release provides signed, architecture-specific Android APK packages for maximum efficiency and device compatibility.
+
+### Architecture Selection Guide
+
+| Download Asset | Target Device / Architecture | Recommended For |
+| :--- | :--- | :--- |
+| **`BlackHole-v1.15.9-arm64-v8a.apk`** | **ARM 64-bit** (`arm64-v8a`) | **Recommended for almost all modern Android phones** (Xiaomi, Samsung, Google Pixel, OnePlus, Motorola, Vivo, etc.). |
+| **`BlackHole-v1.15.9-armeabi-v7a.apk`** | **ARM 32-bit** (`armeabi-v7a`) | Older Android smartphones and budget devices with 32-bit ARM processors. |
+| **`BlackHole-v1.15.9-x86_64.apk`** | **x86 64-bit** (`x86_64`) | Compatible x86-64 Android emulators (e.g. Android Studio emulator) and x86_64 tablets. |
+
+> [!TIP]
+> **Check your device ABI via ADB**: If you are unsure which package matches your device, connect your phone and run:
+> ```bash
+> adb shell getprop ro.product.cpu.abi
+> ```
+> Most modern devices return `arm64-v8a`.
+
+---
+
+### Installation & Upgrade Instructions
+
+1. **Download**: Go to [Latest GitHub Release](https://github.com/thevibingteen/BlackHole/releases/latest) and download the APK matching your device's architecture (typically `arm64-v8a`).
+2. **Checksum Verification (Optional)**: Verify the integrity of the downloaded APK using `SHA256SUMS.txt`:
+   ```bash
+   sha256sum -c SHA256SUMS.txt
+   ```
+3. **Allow Installation from Unknown Sources**: If prompted by Android, grant your browser or file manager permission to install unknown apps.
+4. **Install**: Tap the downloaded APK to install or run:
+   ```bash
+   adb install -r BlackHole-v1.15.9-arm64-v8a.apk
+   ```
+
+> [!IMPORTANT]
+> **Upgrading from Previous Unofficial or Debug Builds**:
+> Android strictly requires matching digital signing certificates for in-place app updates. If you currently have an unofficial or debug-signed version installed:
+> 1. Open BlackHole and go to **Settings → Backup & Restore**.
+> 2. Tap **Create Backup** to export your favorites, playlists, and settings.
+> 3. Uninstall the previous build (your local audio files in shared storage will NOT be deleted).
+> 4. Install the official release-signed APK.
+> 5. Go to **Settings → Backup & Restore** and select **Restore** to import your saved data.
+
+---
+
 ## Building from Source
 
 ### Prerequisites
@@ -127,6 +172,37 @@ This repository ([thevibingteen/BlackHole](https://github.com/thevibingteen/Blac
    ```bash
    flutter run
    ```
+
+### Maintenance Branch Build & Verification (Windows PowerShell)
+
+For development and verification on the active maintenance branch (`maintenance/build-compatibility-upgrade`):
+
+* **Verified Toolchain**:
+  * **Flutter SDK**: `3.47.7` (channel stable)
+  * **Dart SDK**: `3.13.5`
+  * **Java**: JDK 17 (e.g., Eclipse Temurin 17 / OpenJDK 17.0.14)
+  * **Android SDK**: Compile SDK `36`, Target SDK `29`, Minimum SDK `24` (via `flutter.minSdkVersion`)
+  * **Gradle**: `8.14` (AGP `8.3.2`, Kotlin `2.0.21`)
+  * **Gradle User Home**: Set to a dedicated cache path (e.g., `$env:GRADLE_USER_HOME = "D:\DevCaches\GradleUserHome"`)
+
+* **Local Verification & Build Workflow (Verified on Windows)**:
+  1. Resolve local dependencies (preserving protected overrides):
+     ```powershell
+     flutter pub get
+     ```
+  2. Run the complete automated test suite:
+     ```powershell
+     flutter test --reporter expanded
+     ```
+  3. Run static analysis on libraries and tests:
+     ```powershell
+     flutter analyze lib test
+     ```
+  4. Compile the universal debug APK using the dedicated Gradle cache:
+     ```powershell
+     $env:GRADLE_USER_HOME = "D:\DevCaches\GradleUserHome"
+     flutter build apk --debug
+     ```
 
 ---
 

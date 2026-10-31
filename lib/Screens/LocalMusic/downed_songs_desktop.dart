@@ -371,7 +371,9 @@ class _DownloadedSongsDesktopState extends State<DownloadedSongsDesktop>
                         child: CircularProgressIndicator(),
                       )
                     : TabBarView(
-                        physics: const CustomPhysics(),
+                        physics: const PageScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
                         controller: _tcontroller,
                         children: [
                           SongsTab(

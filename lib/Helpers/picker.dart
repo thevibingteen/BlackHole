@@ -29,25 +29,39 @@ class Picker {
     required BuildContext context,
     String? message,
   }) async {
-    final String? temp =
-        await FilePicker.platform.getDirectoryPath(dialogTitle: message);
-    Logger.root.info('Selected folder: $temp');
-    return (temp == '/' || temp == null) ? '' : temp;
+    try {
+      final String? temp =
+          await FilePicker.platform.getDirectoryPath(dialogTitle: message);
+      Logger.root.info('Selected folder: $temp');
+      return (temp == '/' || temp == null) ? '' : temp;
+    } catch (e) {
+      Logger.root.severe('Error selecting folder: $e');
+      return '';
+    }
   }
 
   static Future<String> selectFile({
     required BuildContext context,
-    // List<String>? ext,
+    List<String>? ext,
     String? message,
   }) async {
-    final FilePickerResult? result = await FilePicker.platform.pickFiles(
-      // allowedExtensions: ext,
-      dialogTitle: message,
-    );
+    try {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: (ext != null && ext.isNotEmpty) ? FileType.custom : FileType.any,
+        allowedExtensions: ext,
+        dialogTitle: message,
+      );
 
-    if (result != null) {
-      final File file = File(result.files.first.path!);
-      return file.path == '/' ? '' : file.path;
+      if (result != null && result.files.isNotEmpty) {
+        final String? selectedPath = result.files.first.path;
+        if (selectedPath != null &&
+            selectedPath.isNotEmpty &&
+            selectedPath != '/') {
+          return selectedPath;
+        }
+      }
+    } catch (e) {
+      Logger.root.severe('Error selecting file: $e');
     }
     return '';
   }

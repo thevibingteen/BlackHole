@@ -75,8 +75,16 @@ class HorizontalAlbumsList extends StatelessWidget {
             ? MediaQuery.of(context).size.width / 2
             : MediaQuery.of(context).size.height / 2.5;
     if (boxSize > 250) boxSize = 250;
+    final TextScaler textScaler = MediaQuery.textScalerOf(context);
+    final bool isBold = MediaQuery.boldTextOf(context);
+    final double scaledTitle = textScaler.scale(14.0) * (isBold ? 1.35 : 1.25);
+    final double scaledSubtitle =
+        textScaler.scale(11.0) * (isBold ? 1.35 : 1.25);
+    final double textHeight =
+        (scaledTitle + scaledSubtitle + 8.0).clamp(45.0, 110.0);
+    final double carouselHeight = (boxSize - 30) + textHeight;
     return SizedBox(
-      height: boxSize + 15,
+      height: carouselHeight,
       child: ListView.builder(
         physics: const BouncingScrollPhysics(),
         scrollDirection: Axis.horizontal,
@@ -112,6 +120,10 @@ class HorizontalAlbumsList extends StatelessWidget {
                           image: AssetImage('assets/cover.jpg'),
                         ),
                         imageUrl: getImageUrl(item['image'].toString()),
+                        fadeInDuration:
+                            const Duration(milliseconds: 200),
+                        memCacheWidth: 500,
+                        memCacheHeight: 500,
                         placeholder: (context, url) => Image(
                           fit: BoxFit.cover,
                           image: (item['type'] == 'playlist' ||
@@ -155,8 +167,6 @@ class HorizontalAlbumsList extends StatelessWidget {
                     fit: BoxFit.cover,
                     memCacheWidth: 250,
                     memCacheHeight: 250,
-                    maxWidthDiskCache: 500,
-                    maxHeightDiskCache: 500,
                     errorWidget: (context, _, __) => const Image(
                       fit: BoxFit.cover,
                       image: AssetImage('assets/cover.jpg'),

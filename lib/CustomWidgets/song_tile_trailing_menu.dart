@@ -172,7 +172,23 @@ class _SongTileTrailingMenuState extends State<SongTileTrailingMenu> {
       onSelected: (value) {
         switch (value) {
           case 3:
-            Share.share(widget.data['perma_url'].toString());
+            final String? perma = widget.data['perma_url']?.toString();
+            final String? id = widget.data['id']?.toString();
+            String shareUrl = '';
+            if (perma != null &&
+                perma.isNotEmpty &&
+                perma != 'null' &&
+                !perma.contains('googlevideo.com')) {
+              shareUrl = perma;
+            } else if (id != null && id.isNotEmpty && id != 'null') {
+              if (widget.data['language'] == 'YouTube' ||
+                  RegExp(r'^[a-zA-Z0-9_-]{11}$').hasMatch(id)) {
+                shareUrl = 'https://youtube.com/watch?v=$id';
+              }
+            }
+            if (shareUrl.isNotEmpty) {
+              Share.share(shareUrl);
+            }
             break;
 
           case 4:
@@ -348,8 +364,9 @@ class _YtSongTileTrailingMenuState extends State<YtSongTileTrailingMenu> {
             data: widget.data,
           )
               .then((songMap) {
+            if (songMap == null) return;
             final MediaItem mediaItem =
-                MediaItemConverter.mapToMediaItem(songMap!);
+                MediaItemConverter.mapToMediaItem(songMap);
             if (value == 1) {
               playNext(mediaItem, context);
             }
@@ -368,7 +385,10 @@ class _YtSongTileTrailingMenuState extends State<YtSongTileTrailingMenu> {
           );
         }
         if (value == 5) {
-          Share.share('https://youtube.com/watch?v=${widget.data["id"]}');
+          final String? id = widget.data['id']?.toString();
+          if (id != null && id.isNotEmpty && id != 'null') {
+            Share.share('https://youtube.com/watch?v=$id');
+          }
         }
       },
     );

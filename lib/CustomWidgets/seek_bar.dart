@@ -67,10 +67,12 @@ class _SeekBarState extends State<SeekBar> {
 
   @override
   Widget build(BuildContext context) {
-    final value = min(
-      _dragValue ?? widget.position.inMilliseconds.toDouble(),
-      widget.duration.inMilliseconds.toDouble(),
-    );
+    final double maxDuration =
+        max(0.0, widget.duration.inMilliseconds.toDouble());
+    final double rawValue =
+        _dragValue ?? widget.position.inMilliseconds.toDouble();
+    final double value =
+        maxDuration > 0.0 ? rawValue.clamp(0.0, maxDuration) : 0.0;
     if (_dragValue != null && !_dragging) {
       _dragValue = null;
     }
@@ -150,11 +152,12 @@ class _SeekBarState extends State<SeekBar> {
                     ),
                     child: ExcludeSemantics(
                       child: Slider(
-                        max: widget.duration.inMilliseconds.toDouble(),
-                        value: min(
-                          widget.bufferedPosition.inMilliseconds.toDouble(),
-                          widget.duration.inMilliseconds.toDouble(),
-                        ),
+                        max: maxDuration,
+                        value: maxDuration > 0.0
+                            ? widget.bufferedPosition.inMilliseconds
+                                .toDouble()
+                                .clamp(0.0, maxDuration)
+                            : 0.0,
                         onChanged: (value) {},
                       ),
                     ),
@@ -171,7 +174,7 @@ class _SeekBarState extends State<SeekBar> {
                     overlayShape: SliderComponentShape.noThumb,
                   ),
                   child: Slider(
-                    max: widget.duration.inMilliseconds.toDouble(),
+                    max: maxDuration,
                     value: value,
                     onChanged: (value) {
                       if (!_dragging) {
@@ -264,6 +267,7 @@ void showSliderDialog({
       title: Text(title, textAlign: TextAlign.center),
       content: StreamBuilder<double>(
         stream: audioHandler.speed,
+        initialData: audioHandler.speed.value,
         builder: (context, snapshot) {
           double value = snapshot.data ?? audioHandler.speed.value;
           if (value > max) {
@@ -283,13 +287,16 @@ void showSliderDialog({
                       icon: const Icon(CupertinoIcons.minus),
                       onPressed: audioHandler.speed.value > min
                           ? () {
-                              audioHandler
-                                  .setSpeed(audioHandler.speed.value - 0.1);
+                              audioHandler.setSpeed(
+                                ((audioHandler.speed.value - 0.1) * 10)
+                                        .round() /
+                                    10.0,
+                              );
                             }
                           : null,
                     ),
                     Text(
-                      '${snapshot.data?.toStringAsFixed(1)}$valueSuffix',
+                      '${value.toStringAsFixed(1)}$valueSuffix',
                       style: const TextStyle(
                         fontFamily: 'Fixed',
                         fontWeight: FontWeight.bold,
@@ -300,8 +307,11 @@ void showSliderDialog({
                       icon: const Icon(CupertinoIcons.plus),
                       onPressed: audioHandler.speed.value < max
                           ? () {
-                              audioHandler
-                                  .setSpeed(audioHandler.speed.value + 0.1);
+                              audioHandler.setSpeed(
+                                ((audioHandler.speed.value + 0.1) * 10)
+                                        .round() /
+                                    10.0,
+                              );
                             }
                           : null,
                     ),

@@ -545,6 +545,8 @@ Future<void> fetchPlaylists(
                               ? Image.asset('assets/cover.jpg')
                               : CachedNetworkImage(
                                   fit: BoxFit.cover,
+                                  memCacheWidth: 200,
+                                  memCacheHeight: 200,
                                   errorWidget: (context, _, __) => const Image(
                                     fit: BoxFit.cover,
                                     image: AssetImage('assets/cover.jpg'),

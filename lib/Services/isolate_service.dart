@@ -9,9 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 SendPort? isolateSendPort;
 
-Future<void> startBackgroundProcessing() async {
-  final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
-
+Future<void> startBackgroundProcessing([AudioPlayerHandler? handler]) async {
   final receivePort = ReceivePort();
   await Isolate.spawn(_backgroundProcess, receivePort.sendPort);
 
@@ -23,7 +21,13 @@ Future<void> startBackgroundProcessing() async {
           (await getApplicationDocumentsDirectory()).path;
       isolateSendPort?.send(appDocumentDirectoryPath);
     } else {
-      await audioHandler.customAction('refreshLink', {'newData': message});
+      AudioPlayerHandler? targetHandler = handler;
+      if (targetHandler == null && GetIt.I.isRegistered<AudioPlayerHandler>()) {
+        targetHandler = GetIt.I<AudioPlayerHandler>();
+      }
+      if (targetHandler != null) {
+        await targetHandler.customAction('refreshLink', {'newData': message});
+      }
     }
   });
 }
@@ -48,5 +52,8 @@ Future<void> _backgroundProcess(SendPort sendPort) async {
 }
 
 void addIdToBackgroundProcessingIsolate(String id) {
+  if (isolateSendPort == null) {
+    startBackgroundProcessing();
+  }
   isolateSendPort?.send(id);
 }

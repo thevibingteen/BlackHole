@@ -33,7 +33,7 @@ class NowPlaying extends StatefulWidget {
 }
 
 class _NowPlayingState extends State<NowPlaying> {
-  final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
+  AudioPlayerHandler get audioHandler => GetIt.I<AudioPlayerHandler>();
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -44,6 +44,21 @@ class _NowPlayingState extends State<NowPlaying> {
 
   @override
   Widget build(BuildContext context) {
+    if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(AppLocalizations.of(context)!.nowPlaying),
+          centerTitle: true,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: Center(
+          child: Text(
+            AppLocalizations.of(context)!.nothingPlaying,
+          ),
+        ),
+      );
+    }
     return GradientContainer(
       child: Column(
         children: [

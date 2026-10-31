@@ -20,6 +20,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:blackhole/Helpers/format.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:html_unescape/html_unescape_small.dart';
 import 'package:http/http.dart';
@@ -47,11 +48,48 @@ class YouTubeStreamCandidate {
     required this.resolver,
   });
 
-  bool get isValid =>
-      url.isNotEmpty &&
-      url != 'null' &&
-      Uri.tryParse(url)?.hasAbsolutePath == true &&
-      (url.contains('googlevideo.com') || url.contains('youtube.com'));
+  bool get isValid {
+    if (url.isEmpty || url == 'null') return false;
+
+    final Uri? parsed = Uri.tryParse(url);
+    if (parsed == null || !parsed.hasAbsolutePath) return false;
+
+    // 1. Enforce approved HTTP(S) scheme
+    final String scheme = parsed.scheme.toLowerCase();
+    if (scheme != 'https' && scheme != 'http') return false;
+
+    // 2. Validate parsed host against explicit allowed domains and legitimate subdomains
+    final String host = parsed.host.toLowerCase();
+    final bool isGoogleVideo =
+        host == 'googlevideo.com' || host.endsWith('.googlevideo.com');
+    final bool isYouTube =
+        host == 'youtube.com' || host.endsWith('.youtube.com');
+
+    if (!isGoogleVideo && !isYouTube) return false;
+
+    // 3. Reject HTML watch pages, search results, and non-stream endpoints regardless of query params
+    final List<String> segments = parsed.pathSegments;
+    if (segments.contains('watch') ||
+        segments.contains('results') ||
+        segments.contains('playlist') ||
+        segments.contains('channel') ||
+        segments.contains('shorts') ||
+        segments.contains('feed')) {
+      return false;
+    }
+
+    final String path = parsed.path.toLowerCase();
+    if (path.startsWith('/watch') ||
+        path.startsWith('/results') ||
+        path.startsWith('/playlist') ||
+        path.startsWith('/channel') ||
+        path.startsWith('/shorts') ||
+        path.startsWith('/feed')) {
+      return false;
+    }
+
+    return true;
+  }
 }
 
 List<String> selectStreamUrls(List<YouTubeStreamCandidate> candidates) {
@@ -468,10 +506,30 @@ class YouTubeServices {
     }
   }
 
+  static final Map<String, _CachedSuggestions> _suggestionCache = {};
+
   Future<List> getSearchSuggestions({required String query}) async {
-    const baseUrl =
-        'https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=';
-    final Uri link = Uri.parse(baseUrl + query);
+    final String normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return [];
+
+    if (_suggestionCache.containsKey(normalized)) {
+      final cached = _suggestionCache[normalized]!;
+      if (DateTime.now().difference(cached.timestamp).inMinutes < 5) {
+        return cached.suggestions;
+      } else {
+        _suggestionCache.remove(normalized);
+      }
+    }
+
+    final Uri link = Uri.https(
+      'suggestqueries.google.com',
+      '/complete/search',
+      {
+        'client': 'firefox',
+        'ds': 'yt',
+        'q': query,
+      },
+    );
     try {
       final Response response = await get(link, headers: headers)
           .timeout(const Duration(seconds: 10));
@@ -481,7 +539,14 @@ class YouTubeServices {
       final unescape = HtmlUnescape();
       final List res =
           (jsonDecode(utf8.decode(response.bodyBytes)) as List)[1] as List;
-      return res.map((e) => unescape.convert(e.toString())).toList();
+      final result =
+          res.map((e) => unescape.convert(e.toString())).toList();
+      if (_suggestionCache.length >= 30) {
+        _suggestionCache.remove(_suggestionCache.keys.first);
+      }
+      _suggestionCache[normalized] =
+          _CachedSuggestions(result, DateTime.now());
+      return result;
     } catch (e) {
       Logger.root.severe('Error in getSearchSuggestions: $e');
       return [];
@@ -522,6 +587,18 @@ class YouTubeServices {
   List formatChartItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final List thumbs = (e['gridPlaylistRenderer']?['thumbnail']
+                ?['thumbnails'] as List?) ??
+            [];
+        final String maxThumb = thumbs.isNotEmpty
+            ? thumbs.last['url']?.toString() ?? ''
+            : '';
+        final String standardThumb = thumbs.length > 2
+            ? thumbs[2]['url']?.toString() ?? maxThumb
+            : maxThumb;
+        final String mediumThumb = thumbs.length > 1
+            ? thumbs[1]['url']?.toString() ?? maxThumb
+            : maxThumb;
         return {
           'title': e['gridPlaylistRenderer']['title']['runs'][0]['text'],
           'type': 'chart',
@@ -533,14 +610,10 @@ class YouTubeServices {
               ['watchEndpoint']['playlistId'],
           'firstItemId': e['gridPlaylistRenderer']['navigationEndpoint']
               ['watchEndpoint']['videoId'],
-          'image': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageMedium': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageStandard': e['gridPlaylistRenderer']['thumbnail']['thumbnails']
-              [0]['url'],
-          'imageMax': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
+          'image': maxThumb,
+          'imageMedium': mediumThumb,
+          'imageStandard': standardThumb,
+          'imageMax': maxThumb,
         };
       }).toList();
 
@@ -554,6 +627,18 @@ class YouTubeServices {
   List formatItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final List thumbs = (e['gridPlaylistRenderer']?['thumbnail']
+                ?['thumbnails'] as List?) ??
+            [];
+        final String maxThumb = thumbs.isNotEmpty
+            ? thumbs.last['url']?.toString() ?? ''
+            : '';
+        final String standardThumb = thumbs.length > 2
+            ? thumbs[2]['url']?.toString() ?? maxThumb
+            : maxThumb;
+        final String mediumThumb = thumbs.length > 1
+            ? thumbs[1]['url']?.toString() ?? maxThumb
+            : maxThumb;
         return {
           'title': e['gridPlaylistRenderer']['title']['runs'][0]['text'],
           'type': 'playlist',
@@ -565,14 +650,10 @@ class YouTubeServices {
               ['watchEndpoint']['playlistId'],
           'firstItemId': e['gridPlaylistRenderer']['navigationEndpoint']
               ['watchEndpoint']['videoId'],
-          'image': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageMedium': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
-          'imageStandard': e['gridPlaylistRenderer']['thumbnail']['thumbnails']
-              [0]['url'],
-          'imageMax': e['gridPlaylistRenderer']['thumbnail']['thumbnails'][0]
-              ['url'],
+          'image': maxThumb,
+          'imageMedium': mediumThumb,
+          'imageStandard': standardThumb,
+          'imageMax': maxThumb,
         };
       }).toList();
 
@@ -586,6 +667,20 @@ class YouTubeServices {
   List formatHeadItems(List itemsList) {
     try {
       final List result = itemsList.map((e) {
+        final List thumbs = (e['defaultPromoPanelRenderer']
+                    ?['largeFormFactorBackgroundThumbnail']
+                ?['thumbnailLandscapePortraitRenderer']?['landscape']
+            ?['thumbnails'] as List?) ??
+            [];
+        final String maxThumb = thumbs.isNotEmpty
+            ? thumbs.last['url']?.toString() ?? ''
+            : '';
+        final String standardThumb = thumbs.length > 2
+            ? thumbs[2]['url']?.toString() ?? maxThumb
+            : maxThumb;
+        final String mediumThumb = thumbs.length > 1
+            ? thumbs[1]['url']?.toString() ?? maxThumb
+            : maxThumb;
         return {
           'title': e['defaultPromoPanelRenderer']['title']['runs'][0]['text'],
           'type': 'video',
@@ -596,23 +691,10 @@ class YouTubeServices {
                   .join(),
           'navigationEndpoint': e['defaultPromoPanelRenderer']
               ['navigationEndpoint']['watchEndpoint']['videoId'],
-          'image': e['defaultPromoPanelRenderer']
-                      ['largeFormFactorBackgroundThumbnail']
-                  ['thumbnailLandscapePortraitRenderer']['landscape']
-              ['thumbnails'][0]['url'],
-          'imageMedium': e['defaultPromoPanelRenderer']
-                      ['largeFormFactorBackgroundThumbnail']
-                  ['thumbnailLandscapePortraitRenderer']['landscape']
-              ['thumbnails'][1]['url'],
-          'imageStandard': e['defaultPromoPanelRenderer']
-                      ['largeFormFactorBackgroundThumbnail']
-                  ['thumbnailLandscapePortraitRenderer']['landscape']
-              ['thumbnails'][2]['url'],
-          'imageMax': e['defaultPromoPanelRenderer']
-                          ['largeFormFactorBackgroundThumbnail']
-                      ['thumbnailLandscapePortraitRenderer']['landscape']
-                  ['thumbnails']
-              .last['url'],
+          'image': maxThumb,
+          'imageMedium': mediumThumb,
+          'imageStandard': standardThumb,
+          'imageMax': maxThumb,
         };
       }).toList();
 
@@ -630,9 +712,9 @@ class YouTubeServices {
     bool getUrl = true,
   }) async {
     final int durSec = video.duration?.inSeconds ??
-        int.tryParse(data?['duration']?.toString() ?? '') ??
+        int.tryParse(FormatResponse.parseDuration(data?['duration'])) ??
         180;
-    final String durationStr = durSec.toString();
+    final String durationStr = durSec > 0 ? durSec.toString() : '180';
 
     List<String> urls = [];
     String finalUrl = '';
@@ -739,18 +821,29 @@ class YouTubeServices {
         return null;
       }
     }
+    final String cleanAuthor = video.author.replaceAll('- Topic', '').trim();
+    final String authorFallback =
+        cleanAuthor.isNotEmpty ? cleanAuthor : 'YouTube Video';
+    final String rawSub = data?['subtitle']?.toString() ?? '';
+    final String subtitle =
+        (rawSub.isNotEmpty && rawSub.toLowerCase() != 'null')
+            ? rawSub
+            : authorFallback;
+
     return {
       'id': video.id.value,
-      'album': (data?['album'] ?? '') != ''
-          ? data!['album']
-          : video.author.replaceAll('- Topic', '').trim(),
+      'type': data?['type']?.toString() ?? 'Video',
+      'album': (data?['album'] ?? '') != '' ? data!['album'] : authorFallback,
       'duration': durationStr,
       'title':
           (data?['title'] ?? '') != '' ? data!['title'] : video.title.trim(),
-      'artist': (data?['artist'] ?? '') != ''
-          ? data!['artist']
-          : video.author.replaceAll('- Topic', '').trim(),
-      'image': video.thumbnails.maxResUrl,
+      'artist':
+          (data?['artist'] ?? '') != '' ? data!['artist'] : authorFallback,
+      'channel': authorFallback,
+      'author': authorFallback,
+      'image': video.thumbnails.highResUrl.isNotEmpty
+          ? video.thumbnails.highResUrl
+          : video.thumbnails.maxResUrl,
       'secondImage': video.thumbnails.highResUrl,
       'language': 'YouTube',
       'genre': 'YouTube',
@@ -763,8 +856,7 @@ class YouTubeServices {
       'has_lyrics': 'false',
       'release_date': video.publishDate.toString(),
       'album_id': video.channelId.value,
-      'subtitle':
-          (data?['subtitle'] ?? '') != '' ? data!['subtitle'] : video.author,
+      'subtitle': subtitle,
       'perma_url': video.url,
     };
   }
@@ -864,22 +956,44 @@ class YouTubeServices {
                 vid['ownerText']?['runs']?[0]?['text']?.toString() ??
                     vid['shortBylineText']?['runs']?[0]?['text']?.toString() ??
                     '';
-            final String durationStr =
+            final String cleanAuthor = author.replaceAll('- Topic', '').trim();
+            final String authorFallback =
+                cleanAuthor.isNotEmpty ? cleanAuthor : 'YouTube Video';
+            final String rawDuration =
                 vid['lengthText']?['simpleText']?.toString() ??
                     vid['lengthText']?['runs']?[0]?['text']?.toString() ??
                     '180';
+            final String parsedDur = FormatResponse.parseDuration(rawDuration);
+            final String durationSeconds =
+                parsedDur == '0' ? '180' : parsedDur;
+
+            final String views =
+                vid['shortViewCountText']?['simpleText']?.toString() ??
+                    vid['shortViewCountText']?['runs']?[0]?['text']?.toString() ??
+                    vid['viewCountText']?['simpleText']?.toString() ??
+                    '';
             final List thumbs =
                 (vid['thumbnail']?['thumbnails'] as List?) ?? [];
             final String thumbUrl =
                 thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
 
+            final String subtitle = cleanAuthor.isNotEmpty
+                ? cleanAuthor
+                : (views.isNotEmpty ? views : 'YouTube Video');
+
             if (title.isNotEmpty) {
               results.add({
                 'id': videoId,
+                'type': 'Video',
                 'title': title,
-                'artist': author.replaceAll('- Topic', '').trim(),
-                'album': author.replaceAll('- Topic', '').trim(),
-                'duration': durationStr,
+                'artist': authorFallback,
+                'album': authorFallback,
+                'channel': authorFallback,
+                'author': authorFallback,
+                'subtitle': subtitle,
+                'duration': durationSeconds,
+                'rawDuration': rawDuration,
+                'views': views,
                 'image': thumbUrl,
                 'secondImage': thumbUrl,
                 'language': 'YouTube',
@@ -950,7 +1064,18 @@ class YouTubeServices {
       final Response res = await post(uri, headers: headers, body: body)
           .timeout(const Duration(seconds: 15));
       if (res.statusCode == 200) {
-        return json.decode(res.body) as Map<String, dynamic>?;
+        final decoded = json.decode(res.body) as Map<String, dynamic>?;
+        if (decoded != null && decoded.containsKey('playabilityStatus')) {
+          final playability = decoded['playabilityStatus'] as Map?;
+          final status = playability?['status']?.toString();
+          if (status != null && status != 'OK') {
+            final reason = playability?['reason']?.toString() ?? status;
+            Logger.root.warning(
+              'InnerTube video $videoId playability status: $status ($reason)',
+            );
+          }
+        }
+        return decoded;
       } else {
         Logger.root.warning(
           'InnerTube player returned HTTP ${res.statusCode} for $videoId',
@@ -1069,12 +1194,26 @@ class YouTubeServices {
         Logger.root.info(
           'formatVideoFromInnerTube | Cache HIT for $id (expires in ${cachedExpiredAt - now}s)',
         );
+        final String rawSub = data?['subtitle']?.toString() ?? '';
+        final String artistStr = data?['artist']?.toString() ?? '';
+        final String authorFallback =
+            artistStr.isNotEmpty ? artistStr : 'YouTube Video';
+        final String sub = (rawSub.isNotEmpty && rawSub.toLowerCase() != 'null')
+            ? rawSub
+            : authorFallback;
+        final String parsedDur =
+            FormatResponse.parseDuration(data?['duration']);
+        final String dur = parsedDur != '0' ? parsedDur : '180';
+
         return {
           'id': id,
-          'album': data?['album']?.toString() ?? '',
-          'duration': data?['duration']?.toString() ?? '180',
+          'type': data?['type']?.toString() ?? 'Video',
+          'album': data?['album']?.toString() ?? authorFallback,
+          'duration': dur,
           'title': data?['title']?.toString() ?? id,
-          'artist': data?['artist']?.toString() ?? '',
+          'artist': authorFallback,
+          'channel': authorFallback,
+          'author': authorFallback,
           'image': data?['image']?.toString() ?? '',
           'secondImage': data?['secondImage']?.toString() ?? '',
           'language': 'YouTube',
@@ -1088,7 +1227,7 @@ class YouTubeServices {
           'has_lyrics': 'false',
           'release_date': data?['release_date']?.toString() ?? '',
           'album_id': data?['album_id']?.toString() ?? '',
-          'subtitle': data?['subtitle']?.toString() ?? '',
+          'subtitle': sub,
           'perma_url': 'https://youtube.com/watch?v=$id',
         };
       }
@@ -1108,22 +1247,73 @@ class YouTubeServices {
     final List adaptiveFormats =
         streamingData?['adaptiveFormats'] as List? ?? [];
 
-    final List<String> urls = [];
+    final List<YouTubeStreamCandidate> candidates = [];
 
+    // 1. Prioritize direct audio streams from adaptiveFormats
     for (final f in adaptiveFormats) {
-      if (f is Map &&
-          f['mimeType']?.toString().contains('audio') == true &&
-          f['url'] != null &&
-          f['url'].toString().isNotEmpty) {
-        urls.add(f['url'].toString());
+      if (f is! Map) continue;
+      final String url = f['url']?.toString() ?? '';
+      if (url.isEmpty || url == 'null') continue;
+      final String mime = f['mimeType']?.toString() ?? '';
+      if (!mime.contains('audio')) continue; // Reject video-only streams
+
+      final codecMatch = RegExp(r'codecs="([^"]+)"').firstMatch(mime);
+      final String codec = codecMatch?.group(1) ?? 'audio';
+      final int bitrate = int.tryParse(f['bitrate']?.toString() ?? '') ??
+          int.tryParse(f['averageBitrate']?.toString() ?? '') ??
+          128000;
+      final match = RegExp(r'expire=([0-9]+)').firstMatch(url);
+      final int? exp = match != null ? int.tryParse(match.group(1)!) : null;
+
+      candidates.add(
+        YouTubeStreamCandidate(
+          videoId: id,
+          url: url,
+          mimeType: mime,
+          audioCodec: codec,
+          bitrate: bitrate,
+          isAudioOnly: true,
+          expireAt: exp,
+          resolver: 'innertube_adaptive',
+        ),
+      );
+    }
+
+    // 2. Also collect progressive formats if audioOnly was empty
+    if (candidates.isEmpty) {
+      for (final f in formats) {
+        if (f is! Map) continue;
+        final String url = f['url']?.toString() ?? '';
+        if (url.isEmpty || url == 'null') continue;
+        final String mime = f['mimeType']?.toString() ?? '';
+        if (!mime.contains('mp4a') &&
+            !mime.contains('aac') &&
+            !mime.contains('opus') &&
+            f['audioQuality'] == null) continue;
+
+        final codecMatch = RegExp(r'codecs="([^"]+)"').firstMatch(mime);
+        final String codec = codecMatch?.group(1) ?? 'muxed_audio';
+        final int bitrate =
+            int.tryParse(f['bitrate']?.toString() ?? '') ?? 128000;
+        final match = RegExp(r'expire=([0-9]+)').firstMatch(url);
+        final int? exp = match != null ? int.tryParse(match.group(1)!) : null;
+
+        candidates.add(
+          YouTubeStreamCandidate(
+            videoId: id,
+            url: url,
+            mimeType: mime,
+            audioCodec: codec,
+            bitrate: bitrate,
+            isAudioOnly: false,
+            expireAt: exp,
+            resolver: 'innertube_progressive',
+          ),
+        );
       }
     }
 
-    for (final f in formats) {
-      if (f is Map && f['url'] != null && f['url'].toString().isNotEmpty) {
-        urls.add(f['url'].toString());
-      }
-    }
+    final List<String> urls = selectStreamUrls(candidates);
 
     if (urls.isEmpty) {
       Logger.root.warning('No stream URLs found in InnerTube response for $id');
@@ -1165,26 +1355,41 @@ class YouTubeServices {
         ? data!['title'].toString()
         : (videoDetails?['title']?.toString() ?? id);
 
-    final String artist = (data?['artist']?.toString() ?? '').isNotEmpty
+    final String rawArtist = (data?['artist']?.toString() ?? '').isNotEmpty
         ? data!['artist'].toString()
         : (videoDetails?['author']?.toString() ?? '');
+    final String cleanArtist = rawArtist.replaceAll('- Topic', '').trim();
+    final String authorFallback =
+        cleanArtist.isNotEmpty ? cleanArtist : 'YouTube Video';
 
-    final String duration = (data?['duration']?.toString() ?? '').isNotEmpty
-        ? data!['duration'].toString()
+    final String parsedDataDuration =
+        FormatResponse.parseDuration(data?['duration']);
+    final String duration = parsedDataDuration != '0'
+        ? parsedDataDuration
         : (videoDetails?['lengthSeconds']?.toString() ?? '180');
 
-    final String image = (data?['image']?.toString() ?? '').isNotEmpty
-        ? data!['image'].toString()
-        : thumbUrl;
+    final String image = thumbUrl.isNotEmpty
+        ? thumbUrl
+        : ((data?['image']?.toString() ?? '').isNotEmpty
+            ? data!['image'].toString()
+            : '');
+
+    final String rawSub = data?['subtitle']?.toString() ?? '';
+    final String sub = (rawSub.isNotEmpty && rawSub.toLowerCase() != 'null')
+        ? rawSub
+        : authorFallback;
 
     return {
       'id': id,
+      'type': data?['type']?.toString() ?? 'Video',
       'album': (data?['album']?.toString() ?? '').isNotEmpty
           ? data!['album'].toString()
-          : artist,
+          : authorFallback,
       'duration': duration,
       'title': title.trim(),
-      'artist': artist.replaceAll('- Topic', '').trim(),
+      'artist': authorFallback,
+      'channel': authorFallback,
+      'author': authorFallback,
       'image': image,
       'secondImage': thumbUrl,
       'language': 'YouTube',
@@ -1198,9 +1403,7 @@ class YouTubeServices {
       'has_lyrics': 'false',
       'release_date': data?['release_date']?.toString() ?? '',
       'album_id': videoDetails?['channelId']?.toString() ?? '',
-      'subtitle': (data?['subtitle']?.toString() ?? '').isNotEmpty
-          ? data!['subtitle'].toString()
-          : artist,
+      'subtitle': sub,
       'perma_url': 'https://youtube.com/watch?v=$id',
     };
   }
@@ -1308,4 +1511,10 @@ class YouTubeServices {
     );
     return [];
   }
+}
+
+class _CachedSuggestions {
+  final List suggestions;
+  final DateTime timestamp;
+  _CachedSuggestions(this.suggestions, this.timestamp);
 }

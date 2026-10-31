@@ -20,6 +20,7 @@
 import 'package:blackhole/CustomWidgets/bouncy_sliver_scroll_view.dart';
 import 'package:blackhole/CustomWidgets/copy_clipboard.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/CustomWidgets/miniplayer.dart';
 import 'package:blackhole/CustomWidgets/song_tile_trailing_menu.dart';
 import 'package:blackhole/Services/player_service.dart';
@@ -143,6 +144,8 @@ class _YouTubeArtistState extends State<YouTubeArtist> {
                                         dimension: 50,
                                         child: CachedNetworkImage(
                                           fit: BoxFit.cover,
+                                          memCacheWidth: 200,
+                                          memCacheHeight: 200,
                                           errorWidget: (context, _, __) =>
                                               const Image(
                                             fit: BoxFit.cover,
@@ -150,7 +153,9 @@ class _YouTubeArtistState extends State<YouTubeArtist> {
                                               'assets/cover.jpg',
                                             ),
                                           ),
-                                          imageUrl: entry['image'].toString(),
+                                          imageUrl: getImageUrl(
+                                            entry['image']?.toString(),
+                                          ),
                                           placeholder: (context, url) =>
                                               const Image(
                                             fit: BoxFit.cover,

@@ -430,7 +430,7 @@ class YtMusicService {
 
     if (id == null || id.isEmpty) return null;
 
-    final String image = images.isNotEmpty ? images.first.toString() : '';
+    final String image = images.isNotEmpty ? images.last.toString() : '';
     final bool isPlayable = type == 'Song' || type == 'Video';
 
     return {
@@ -457,12 +457,25 @@ class YtMusicService {
     };
   }
 
+  static final Map<String, _CachedYtSearchResult> _searchResultCache = {};
+
   Future<List<Map>> search(
     String query, {
     String? scope,
     bool ignoreSpelling = false,
     String? filter,
   }) async {
+    final String cacheKey =
+        '${query.trim().toLowerCase()}|$filter|$scope|$ignoreSpelling';
+    if (_searchResultCache.containsKey(cacheKey)) {
+      final cached = _searchResultCache[cacheKey]!;
+      if (DateTime.now().difference(cached.timestamp).inMinutes < 10) {
+        Logger.root.info('YtMusic search returning cached results for "$query"');
+        return cached.results;
+      } else {
+        _searchResultCache.remove(cacheKey);
+      }
+    }
     if (headers == null) {
       await init();
     }
@@ -608,6 +621,15 @@ class YtMusicService {
             });
           }
         }
+      }
+      if (searchResults.isNotEmpty) {
+        if (_searchResultCache.length >= 20) {
+          _searchResultCache.remove(_searchResultCache.keys.first);
+        }
+        _searchResultCache[cacheKey] = _CachedYtSearchResult(
+          List<Map>.from(searchResults),
+          DateTime.now(),
+        );
       }
       return searchResults;
     } catch (e) {
@@ -1401,12 +1423,13 @@ class YtMusicService {
       final List<Map> songResults = [];
       for (final item in finalResults) {
         final String id = nav(item, mrlirPlaylistId).toString();
-        final String image = nav(item, [
+        final thumbs = nav(item, [
           mRLIR,
           ...thumbnails,
-          0,
-          'url',
-        ]).toString();
+        ]) as List? ?? [];
+        final String image = thumbs.isNotEmpty
+            ? thumbs.last['url']?.toString() ?? ''
+            : '';
         final String title = nav(item, [
           mRLIR,
           'flexColumns',
@@ -1562,4 +1585,10 @@ class YtMusicService {
       return [];
     }
   }
+}
+
+class _CachedYtSearchResult {
+  final List<Map> results;
+  final DateTime timestamp;
+  _CachedYtSearchResult(this.results, this.timestamp);
 }

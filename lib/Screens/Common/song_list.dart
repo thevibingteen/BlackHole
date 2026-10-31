@@ -124,14 +124,46 @@ class _SongsListPageState extends State<SongsListPage> {
           });
           break;
         case 'playlist':
+          final String playlistId = widget.listItem['id'].toString();
           SaavnAPI()
-              .fetchPlaylistSongs(widget.listItem['id'].toString())
+              .fetchPlaylistSongs(playlistId)
               .then((value) {
-            setState(() {
-              songList = value['songs'] as List;
-              fetched = true;
-              loading = false;
-            });
+            final List songs = (value['songs'] ?? []) as List;
+            if (songs.isNotEmpty) {
+              setState(() {
+                songList = songs;
+                fetched = true;
+                loading = false;
+              });
+            } else if (widget.listItem['perma_url'] != null ||
+                widget.listItem['url'] != null) {
+              final String token = (widget.listItem['perma_url'] ??
+                      widget.listItem['url'])
+                  .toString()
+                  .split('/')
+                  .last;
+              SaavnAPI()
+                  .getSongFromToken(token, 'playlist')
+                  .then((tokenVal) {
+                setState(() {
+                  songList = (tokenVal['songs'] ?? []) as List;
+                  fetched = true;
+                  loading = false;
+                });
+              }).catchError((_) {
+                setState(() {
+                  songList = [];
+                  fetched = true;
+                  loading = false;
+                });
+              });
+            } else {
+              setState(() {
+                songList = [];
+                fetched = true;
+                loading = false;
+              });
+            }
             if (value['error'] != null && value['error'].toString() != '') {
               ShowSnackBar().showSnackBar(
                 context,
@@ -139,6 +171,11 @@ class _SongsListPageState extends State<SongsListPage> {
                 duration: const Duration(seconds: 3),
               );
             }
+          }).catchError((e) {
+            setState(() {
+              fetched = true;
+              loading = false;
+            });
           });
           break;
         case 'mix':
@@ -183,6 +220,58 @@ class _SongsListPageState extends State<SongsListPage> {
                 duration: const Duration(seconds: 3),
               );
             }
+          });
+          break;
+        case 'artist':
+          final String artistToken = (widget.listItem['artistToken'] != null &&
+                  widget.listItem['artistToken'].toString().isNotEmpty)
+              ? widget.listItem['artistToken'].toString()
+              : (widget.listItem['perma_url'] ?? widget.listItem['url'])
+                      ?.toString()
+                      .split('/')
+                      .last ??
+                  widget.listItem['id']?.toString() ??
+                  '';
+          SaavnAPI()
+              .fetchArtistSongs(artistToken: artistToken)
+              .then((value) {
+            setState(() {
+              songList = (value['topSongs'] ?? value['songs'] ?? []) as List;
+              fetched = true;
+              loading = false;
+            });
+            if (value['error'] != null && value['error'].toString() != '') {
+              ShowSnackBar().showSnackBar(
+                context,
+                'Error: ${value["error"]}',
+                duration: const Duration(seconds: 3),
+              );
+            }
+          }).catchError((e) {
+            setState(() {
+              fetched = true;
+              loading = false;
+            });
+          });
+          break;
+        case 'channel':
+          final String token = (widget.listItem['perma_url'] ?? widget.listItem['url'])
+                  ?.toString()
+                  .split('/')
+                  .last ??
+              widget.listItem['id']?.toString() ??
+              '';
+          SaavnAPI().getSongFromToken(token, 'channel').then((value) {
+            setState(() {
+              songList = (value['songs'] ?? []) as List;
+              fetched = true;
+              loading = false;
+            });
+          }).catchError((e) {
+            setState(() {
+              fetched = true;
+              loading = false;
+            });
           });
           break;
         default:
@@ -254,7 +343,13 @@ class _SongsListPageState extends State<SongsListPage> {
                       ],
                       title: widget.listItem['title']?.toString().unescape() ??
                           'Songs',
-                      subtitle: '${songList.length} Songs',
+                      subtitle: loading
+                          ? 'Loading…'
+                          : (songList.isNotEmpty
+                              ? '${songList.length} Songs'
+                              : (widget.listItem['subtitle']?.toString() ??
+                                  widget.listItem['subTitle']?.toString() ??
+                                  '')),
                       secondarySubtitle:
                           widget.listItem['subTitle']?.toString() ??
                               widget.listItem['subtitle']?.toString(),

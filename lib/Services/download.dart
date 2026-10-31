@@ -37,6 +37,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 class Download with ChangeNotifier {
   static final Map<String, Download> _instances = {};
+  static String lastGlobalDownloadId = '';
   final String id;
 
   factory Download(String id) {
@@ -76,24 +77,19 @@ class Download with ChangeNotifier {
     bool createFolder = false,
     String? folderName,
   }) async {
+    if (data['id'] != null && data['id'].toString() != id) {
+      return Download(data['id'].toString()).prepareDownload(
+        context,
+        data,
+        createFolder: createFolder,
+        folderName: folderName,
+      );
+    }
     Logger.root.info('Preparing download for ${data['title']}');
     download = true;
-    if (Platform.isAndroid || Platform.isIOS) {
-      Logger.root.info('Requesting storage permission');
-      PermissionStatus status = await Permission.storage.status;
-      if (status.isDenied) {
-        Logger.root.info('Request denied');
-        await [
-          Permission.storage,
-          Permission.accessMediaLocation,
-          Permission.mediaLibrary,
-        ].request();
-      }
-      status = await Permission.storage.status;
-      if (status.isPermanentlyDenied) {
-        Logger.root.info('Request permanently denied');
-        await openAppSettings();
-      }
+    if (Platform.isAndroid) {
+      Logger.root.info('Checking storage/media permission for download');
+      await ExtStorageProvider.requestPermission(Permission.storage);
     }
     final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
     data['title'] = data['title'].toString().split('(From')[0].trim();
@@ -126,7 +122,9 @@ class Download with ChangeNotifier {
         dirName: 'Music',
         writeAccess: true,
       );
-      dlPath = temp!;
+      dlPath = (temp != null && temp.isNotEmpty)
+          ? temp
+          : (await getApplicationDocumentsDirectory()).path;
     }
     Logger.root.info('New Download path: $dlPath');
     if (data['url'].toString().contains('google') && createYoutubeFolder) {
@@ -324,7 +322,7 @@ class Download with ChangeNotifier {
       appPath ??= (await getTemporaryDirectory()).path;
     } else {
       final Directory? temp = await getDownloadsDirectory();
-      appPath = temp!.path;
+      appPath = temp?.path ?? (await getTemporaryDirectory()).path;
     }
 
     try {
@@ -477,7 +475,10 @@ class Download with ChangeNotifier {
                   id: data['id'].toString(),
                   title: data['title'].toString(),
                   artist: data['artist'].toString(),
-                  saavnHas: data['has_lyrics'] == 'true',
+                  album: data['album']?.toString(),
+                  duration: int.tryParse(data['duration']?.toString() ?? ''),
+                  saavnHas: data['has_lyrics'] == true ||
+                      data['has_lyrics'] == 'true',
                 );
                 lyrics = res['lyrics'].toString();
               }
@@ -536,6 +537,7 @@ class Download with ChangeNotifier {
             Logger.root.info('Closing connection & notifying listeners');
             client.close();
             lastDownloadId = data['id'].toString();
+            lastGlobalDownloadId = data['id'].toString();
             progress = 0.0;
             notifyListeners();
 
@@ -568,6 +570,8 @@ class Download with ChangeNotifier {
             ShowSnackBar().showSnackBar(
               context,
               '"${data['title']}" ${AppLocalizations.of(context)!.downed}',
+              duration: const Duration(seconds: 3),
+              noAction: true,
             );
           } else {
             download = true;

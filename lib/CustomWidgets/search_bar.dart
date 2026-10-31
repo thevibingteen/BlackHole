@@ -17,6 +17,7 @@
  * Copyright (c) 2021-2022, Ankit Sangwan
  */
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:blackhole/Screens/YouTube/youtube_search.dart';
@@ -62,12 +63,15 @@ class _SearchBarState extends State<SearchBar> {
   String query = '';
   final ValueNotifier<bool> hide = ValueNotifier<bool>(true);
   final ValueNotifier<List> suggestionsList = ValueNotifier<List>([]);
+  Timer? _debounceTimer;
+  int _searchRequestId = 0;
 
   @override
   void dispose() {
-    super.dispose();
+    _debounceTimer?.cancel();
     hide.dispose();
     suggestionsList.dispose();
+    super.dispose();
   }
 
   @override
@@ -155,50 +159,46 @@ class _SearchBarState extends State<SearchBar> {
                     textInputAction: TextInputAction.search,
                     onChanged: (val) {
                       tempQuery = val;
+                      _debounceTimer?.cancel();
                       if (val.trim() == '') {
                         hide.value = true;
                         suggestionsList.value = [];
                         if (widget.onQueryCleared != null) {
                           widget.onQueryCleared!.call();
                         }
+                        return;
                       }
-                      if (widget.liveSearch && val.trim() != '') {
+                      if (widget.liveSearch) {
                         hide.value = false;
-                        if (widget.isYt) {
-                          Future.delayed(
-                            const Duration(
-                              milliseconds: 600,
-                            ),
-                            () async {
-                              if (tempQuery == val &&
-                                  tempQuery.trim() != '' &&
-                                  tempQuery != query) {
-                                query = tempQuery;
-                                suggestionsList.value =
-                                    await widget.onQueryChanged!(tempQuery)
-                                        as List;
-                              }
-                            },
-                          );
-                        } else {
-                          Future.delayed(
-                            const Duration(
-                              milliseconds: 600,
-                            ),
-                            () async {
-                              if (tempQuery == val &&
-                                  tempQuery.trim() != '' &&
-                                  tempQuery != query) {
-                                query = tempQuery;
-                                if (widget.onQueryChanged == null) {
-                                  widget.onSubmitted(tempQuery);
-                                } else {
-                                  widget.onQueryChanged!(tempQuery);
+                        final int currentRequestId = ++_searchRequestId;
+                        _debounceTimer = Timer(
+                          const Duration(milliseconds: 250),
+                          () async {
+                            if (!mounted ||
+                                tempQuery != val ||
+                                val.trim().isEmpty) {
+                              return;
+                            }
+                            query = val.trim();
+                            if (widget.isYt) {
+                              if (widget.onQueryChanged != null) {
+                                final res = await widget.onQueryChanged!(query);
+                                if (mounted &&
+                                    currentRequestId == _searchRequestId &&
+                                    tempQuery == val) {
+                                  suggestionsList.value =
+                                      res is List ? res : [];
                                 }
                               }
-                            },
-                          );
-                        }
+                            } else {
+                              if (widget.onQueryChanged == null) {
+                                widget.onSubmitted(query);
+                              } else {
+                                widget.onQueryChanged!(query);
+                              }
+                            }
+                          },
+                        );
                       }
                     },
                     onSubmitted: (submittedQuery) {

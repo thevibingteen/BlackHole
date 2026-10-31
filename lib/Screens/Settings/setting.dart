@@ -24,6 +24,7 @@ import 'package:blackhole/CustomWidgets/gradient_containers.dart';
 import 'package:blackhole/CustomWidgets/popup.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/CustomWidgets/textinput_dialog.dart';
+import 'package:blackhole/Helpers/app_links.dart';
 import 'package:blackhole/Helpers/backup_restore.dart';
 import 'package:blackhole/Helpers/config.dart';
 import 'package:blackhole/Helpers/countrycodes.dart';
@@ -129,10 +130,13 @@ class _SettingPageState extends State<SettingPage>
     'preferredMiniButtons',
     defaultValue: ['Like', 'Play/Pause', 'Next'],
   )?.toList() as List;
-  List<int> preferredCompactNotificationButtons = Hive.box('settings').get(
-    'preferredCompactNotificationButtons',
-    defaultValue: [1, 2, 3],
-  ) as List<int>;
+  List<int> preferredCompactNotificationButtons = List<int>.from(
+    (Hive.box('settings').get(
+      'preferredCompactNotificationButtons',
+      defaultValue: [1, 2, 3],
+    ) as List)
+        .map((e) => (e is int) ? e : int.tryParse(e.toString()) ?? 1),
+  );
   final ValueNotifier<List> sectionsToShow = ValueNotifier<List>(
     Hive.box('settings').get(
       'sectionsToShow',
@@ -3835,13 +3839,22 @@ class _SettingPageState extends State<SettingPage>
                                       .get('supportedAbis') as List?;
 
                                   if (abis == null) {
-                                    final DeviceInfoPlugin deviceInfo =
-                                        DeviceInfoPlugin();
-                                    final AndroidDeviceInfo androidDeviceInfo =
-                                        await deviceInfo.androidInfo;
-                                    abis = androidDeviceInfo.supportedAbis;
-                                    await Hive.box('settings')
-                                        .put('supportedAbis', abis);
+                                    if (Platform.isAndroid) {
+                                      try {
+                                        final DeviceInfoPlugin deviceInfo =
+                                            DeviceInfoPlugin();
+                                        final AndroidDeviceInfo
+                                            androidDeviceInfo =
+                                            await deviceInfo.androidInfo;
+                                        abis = androidDeviceInfo.supportedAbis;
+                                        await Hive.box('settings')
+                                            .put('supportedAbis', abis);
+                                      } catch (e) {
+                                        abis = [];
+                                      }
+                                    } else {
+                                      abis = [];
+                                    }
                                   }
                                   ShowSnackBar().showSnackBar(
                                     context,
@@ -3858,7 +3871,7 @@ class _SettingPageState extends State<SettingPage>
                                         Navigator.pop(context);
                                         launchUrl(
                                           Uri.parse(
-                                            'https://sangwan5688.github.io/download/',
+                                            '${AppLinks.githubRepoUrl}/releases',
                                           ),
                                           mode: LaunchMode.externalApplication,
                                         );
@@ -3898,9 +3911,11 @@ class _SettingPageState extends State<SettingPage>
                           ),
                           onTap: () {
                             Share.share(
-                              '${AppLocalizations.of(
-                                context,
-                              )!.shareAppText}: https://sangwan5688.github.io/',
+                              AppLinks.getShareAppPayload(
+                                AppLocalizations.of(
+                                  context,
+                                )!.shareAppText,
+                              ),
                             );
                           },
                           dense: true,

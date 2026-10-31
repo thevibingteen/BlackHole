@@ -37,6 +37,7 @@ import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/CustomWidgets/textinput_dialog.dart';
 import 'package:blackhole/Helpers/config.dart';
 import 'package:blackhole/Helpers/dominant_color.dart';
+import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/lyrics.dart';
 import 'package:blackhole/Helpers/mediaitem_converter.dart';
 import 'package:blackhole/Screens/Common/song_list.dart';
@@ -72,22 +73,31 @@ class _PlayScreenState extends State<PlayScreen> {
   final bool getLyricsOnline =
       Hive.box('settings').get('getLyricsOnline', defaultValue: true) as bool;
 
-  final MyTheme currentTheme = GetIt.I<MyTheme>();
-  final ValueNotifier<List<Color?>?> gradientColor =
-      ValueNotifier<List<Color?>?>(GetIt.I<MyTheme>().playGradientColor);
+  MyTheme get currentTheme =>
+      GetIt.I.isRegistered<MyTheme>() ? GetIt.I<MyTheme>() : MyTheme();
+  late final ValueNotifier<List<Color?>?> gradientColor =
+      ValueNotifier<List<Color?>?>(
+    GetIt.I.isRegistered<MyTheme>()
+        ? GetIt.I<MyTheme>().playGradientColor
+        : [],
+  );
   final PanelController _panelController = PanelController();
-  final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
+  AudioPlayerHandler get audioHandler => GetIt.I<AudioPlayerHandler>();
   GlobalKey<FlipCardState> cardKey = GlobalKey<FlipCardState>();
   late Duration _time;
 
   bool isSharePopupShown = false;
 
   void sleepTimer(int time) {
-    audioHandler.customAction('sleepTimer', {'time': time});
+    if (GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      audioHandler.customAction('sleepTimer', {'time': time});
+    }
   }
 
   void sleepCounter(int count) {
-    audioHandler.customAction('sleepCounter', {'count': count});
+    if (GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      audioHandler.customAction('sleepCounter', {'count': count});
+    }
   }
 
   Future<dynamic> setTimer(
@@ -206,6 +216,21 @@ class _PlayScreenState extends State<PlayScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: const Center(
+          child: Text(
+            'Audio player is unavailable.',
+            style: TextStyle(color: Colors.white70),
+          ),
+        ),
+      );
+    }
+
     BuildContext? scaffoldContext;
 
     return Dismissible(
@@ -808,15 +833,16 @@ class ControlButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final MediaItem mediaItem = audioHandler.mediaItem.value!;
-    final bool online = mediaItem.extras!['url'].toString().startsWith('http');
+    final MediaItem? mediaItem = audioHandler.mediaItem.value;
+    final bool online =
+        mediaItem?.extras?['url']?.toString().startsWith('http') ?? false;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       mainAxisSize: MainAxisSize.min,
       children: buttons.map((e) {
         switch (e) {
           case 'Like':
-            return !online
+            return (!online || mediaItem == null)
                 ? const SizedBox()
                 : LikeButton(
                     mediaItem: mediaItem,
@@ -939,7 +965,7 @@ class ControlButtons extends StatelessWidget {
               },
             );
           case 'Download':
-            return !online
+            return (!online || mediaItem == null)
                 ? const SizedBox()
                 : DownloadButton(
                     size: 20.0,
@@ -1813,8 +1839,9 @@ class _ArtWorkWidgetState extends State<ArtWorkWidget> {
                                             MediaItemConverter.mediaItemToMap(
                                           widget.mediaItem,
                                         );
+                                        final int durSec = int.tryParse(FormatResponse.parseDuration(details["duration"])) ?? 0;
                                         details['duration'] =
-                                            '${int.parse(details["duration"].toString()) ~/ 60}:${int.parse(details["duration"].toString()) % 60}';
+                                            '${durSec ~/ 60}:${(durSec % 60).toString().padLeft(2, "0")}';
                                         // style: Theme.of(context).textTheme.caption,
                                         if (widget.mediaItem.extras?['size'] !=
                                             null) {

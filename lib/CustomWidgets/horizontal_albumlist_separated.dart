@@ -78,8 +78,17 @@ class HorizontalAlbumsListSeparated extends StatelessWidget {
             ? MediaQuery.of(context).size.width * portion / 3
             : MediaQuery.of(context).size.width * portion / 2
         : MediaQuery.of(context).size.width * portion;
+    final TextScaler textScaler = MediaQuery.textScalerOf(context);
+    final bool isBold = MediaQuery.boldTextOf(context);
+    final double scaleFactor = textScaler.scale(1.0);
+    final double extraTextHeight = (scaleFactor > 1.0)
+        ? (scaleFactor - 1.0) * 32.0 + (isBold ? 6.0 : 0.0)
+        : (isBold ? 6.0 : 0.0);
+    final double rowHeight = (74.0 + extraTextHeight).clamp(74.0, 115.0);
+    final int rowCount = songsList.length < 4 ? songsList.length : 4;
+    final double totalHeight = rowCount * rowHeight;
     return SizedBox(
-      height: songsList.length < 4 ? songsList.length * 74 : 74 * 4,
+      height: totalHeight,
       child: Align(
         alignment: Alignment.centerLeft,
         child: ListView.builder(
@@ -91,7 +100,7 @@ class HorizontalAlbumsListSeparated extends StatelessWidget {
           itemBuilder: (context, index) {
             final itemGroup = songsList.skip(index * 4).take(4);
             return SizedBox(
-              height: 72 * 4,
+              height: totalHeight,
               width: listSize,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -117,10 +126,10 @@ class HorizontalAlbumsListSeparated extends StatelessWidget {
                         dimension: 55.0,
                         child: CachedNetworkImage(
                           fit: BoxFit.cover,
-                          memCacheWidth: 150,
-                          memCacheHeight: 150,
-                          maxWidthDiskCache: 300,
-                          maxHeightDiskCache: 300,
+                          fadeInDuration:
+                              const Duration(milliseconds: 200),
+                          memCacheWidth: 250,
+                          memCacheHeight: 250,
                           errorWidget: (context, _, __) => const Image(
                             fit: BoxFit.cover,
                             image: AssetImage('assets/cover.jpg'),

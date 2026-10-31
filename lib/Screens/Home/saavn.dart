@@ -20,6 +20,7 @@
 import 'dart:io';
 
 import 'package:blackhole/APIs/api.dart';
+import 'package:blackhole/Helpers/radio_helper.dart';
 import 'package:blackhole/CustomWidgets/collage.dart';
 import 'package:blackhole/CustomWidgets/horizontal_albumlist.dart';
 import 'package:blackhole/CustomWidgets/horizontal_albumlist_separated.dart';
@@ -715,18 +716,16 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                   );
                                 },
                                 onTap: () async {
-                                  if (item['type'] == 'radio_station') {
-                                    ShowSnackBar().showSnackBar(
-                                      context,
-                                      AppLocalizations.of(context)!
-                                          .connectingRadio,
-                                      duration: const Duration(seconds: 2),
-                                    );
+                                  if (isRadio ||
+                                      item['type'] == 'radio_station' ||
+                                      item['type'] == 'radio') {
                                     try {
                                       final stationType = item['more_info']
                                                   ?['featured_station_type']
                                               ?.toString() ??
-                                          'featured';
+                                          (item['type'] == 'artist'
+                                              ? 'artist'
+                                              : 'featured');
                                       final stationName = stationType ==
                                               'artist'
                                           ? (item['more_info']?['query']
@@ -757,47 +756,12 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                       final lang = item['more_info']
                                               ?['language']
                                           ?.toString();
-
-                                      final stationId =
-                                          await SaavnAPI().createRadio(
-                                        names: [stationName],
-                                        language: lang,
+                                      await RadioConnectionHandler.connectAndPlay(
+                                        context: context,
+                                        stationName: stationName,
                                         stationType: stationType,
+                                        language: lang,
                                       );
-                                      if (stationId != null &&
-                                          stationId.isNotEmpty) {
-                                        final songs = await SaavnAPI()
-                                            .getRadioSongs(
-                                                stationId: stationId);
-                                        if (songs.isNotEmpty) {
-                                          PlayerInvoke.init(
-                                            songsList: songs,
-                                            index: 0,
-                                            isOffline: false,
-                                            shuffle: true,
-                                          );
-                                          if (context.mounted) {
-                                            Navigator.pushNamed(
-                                              context,
-                                              '/player',
-                                            );
-                                          }
-                                        } else {
-                                          if (context.mounted) {
-                                            ShowSnackBar().showSnackBar(
-                                              context,
-                                              'Failed to connect to Radio',
-                                            );
-                                          }
-                                        }
-                                      } else {
-                                        if (context.mounted) {
-                                          ShowSnackBar().showSnackBar(
-                                            context,
-                                            'Failed to connect to Radio',
-                                          );
-                                        }
-                                      }
                                     } catch (e) {
                                       if (context.mounted) {
                                         ShowSnackBar().showSnackBar(
@@ -806,31 +770,47 @@ class _SaavnHomePageState extends State<SaavnHomePage>
                                         );
                                       }
                                     }
-                                  } else {
-                                    if (item['type'] == 'song') {
-                                      PlayerInvoke.init(
-                                        songsList: currentSongList as List,
-                                        index: currentSongList.indexWhere(
-                                          (e) => e['id'] == item['id'],
+                                  } else if (item['type'] == 'artist') {
+                                    final Map artistData = Map.from(item);
+                                    artistData['artistToken'] ??=
+                                        (item['perma_url'] ?? item['url'])
+                                                ?.toString()
+                                                .split('/')
+                                                .last ??
+                                            item['id']?.toString();
+                                    Navigator.push(
+                                      context,
+                                      PageRouteBuilder(
+                                        opaque: false,
+                                        pageBuilder: (_, __, ___) =>
+                                            ArtistSearchPage(
+                                          data: artistData,
                                         ),
-                                        isOffline: false,
-                                      );
-                                    }
-                                    item['type'] == 'song'
-                                        ? Navigator.pushNamed(
-                                            context,
-                                            '/player',
-                                          )
-                                        : Navigator.push(
-                                            context,
-                                            PageRouteBuilder(
-                                              opaque: false,
-                                              pageBuilder: (_, __, ___) =>
-                                                  SongsListPage(
-                                                listItem: item,
-                                              ),
-                                            ),
-                                          );
+                                      ),
+                                    );
+                                  } else if (item['type'] == 'song') {
+                                    PlayerInvoke.init(
+                                      songsList: currentSongList as List,
+                                      index: currentSongList.indexWhere(
+                                        (e) => e['id'] == item['id'],
+                                      ),
+                                      isOffline: false,
+                                    );
+                                    Navigator.pushNamed(
+                                      context,
+                                      '/player',
+                                    );
+                                  } else {
+                                    Navigator.push(
+                                      context,
+                                      PageRouteBuilder(
+                                        opaque: false,
+                                        pageBuilder: (_, __, ___) =>
+                                            SongsListPage(
+                                          listItem: item,
+                                        ),
+                                      ),
+                                    );
                                   }
                                 },
                                 child: SizedBox(

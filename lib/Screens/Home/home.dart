@@ -20,12 +20,13 @@
 import 'dart:io';
 import 'dart:math';
 
-import 'package:blackhole/CustomWidgets/custom_physics.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
 import 'package:blackhole/CustomWidgets/miniplayer.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/CustomWidgets/textinput_dialog.dart';
+import 'package:blackhole/Helpers/app_links.dart';
 import 'package:blackhole/Helpers/backup_restore.dart';
+import 'package:blackhole/Helpers/startup_profiler.dart';
 import 'package:blackhole/Helpers/downloads_checker.dart';
 import 'package:blackhole/Helpers/github.dart';
 import 'package:blackhole/Helpers/update.dart';
@@ -54,8 +55,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final ValueNotifier<int> _selectedIndex = ValueNotifier<int>(0);
+  final Set<int> _visitedPages = {0};
   bool checked = false;
-  String? appVersion;
+  String? appVersion =
+      Hive.box('settings').get('appVersion', defaultValue: null) as String?;
   String name =
       Hive.box('settings').get('name', defaultValue: 'Guest') as String;
   bool checkUpdate =
@@ -73,10 +76,18 @@ class _HomePageState extends State<HomePage> {
       'sectionsToShow',
       defaultValue: ['Home', 'Top Charts', 'YouTube', 'Library'],
     ) as List;
+    _visitedPages.clear();
+    _visitedPages.add(_selectedIndex.value);
+    _visitedPages.add(0);
     setState(() {});
   }
 
   void _onItemTapped(int index) {
+    if (!_visitedPages.contains(index)) {
+      setState(() {
+        _visitedPages.add(index);
+      });
+    }
     _selectedIndex.value = index;
     _pageController.jumpToPage(
       index,
@@ -102,11 +113,16 @@ class _HomePageState extends State<HomePage> {
     return true;
   }
 
-  Widget checkVersion() {
+  void _runDeferredStartupTasks() {
     if (!checked) {
       checked = true;
       PackageInfo.fromPlatform().then((PackageInfo packageInfo) {
-        appVersion = packageInfo.version;
+        if (mounted) {
+          setState(() {
+            appVersion = packageInfo.version;
+          });
+        }
+        Hive.box('settings').put('appVersion', packageInfo.version);
 
         if (checkUpdate) {
           GitHub.getLatestVersion().then((String version) async {
@@ -114,17 +130,6 @@ class _HomePageState extends State<HomePage> {
               version,
               appVersion!,
             )) {
-              // List? abis =
-              //     await Hive.box('settings').get('supportedAbis') as List?;
-
-              // if (abis == null) {
-              //   final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-              //   final AndroidDeviceInfo androidDeviceInfo =
-              //       await deviceInfo.androidInfo;
-              //   abis = androidDeviceInfo.supportedAbis;
-              //   await Hive.box('settings').put('supportedAbis', abis);
-              // }
-
               ShowSnackBar().showSnackBar(
                 context,
                 AppLocalizations.of(context)!.updateAvailable,
@@ -135,7 +140,7 @@ class _HomePageState extends State<HomePage> {
                   onPressed: () {
                     Navigator.pop(context);
                     launchUrl(
-                      Uri.parse('https://sangwan5688.github.io/download/'),
+                      Uri.parse('${AppLinks.githubRepoUrl}/releases'),
                       mode: LaunchMode.externalApplication,
                     );
                   },
@@ -218,10 +223,11 @@ class _HomePageState extends State<HomePage> {
       if (Hive.box('settings').get('proxyPort') == null) {
         Hive.box('settings').put('proxyPort', 8080);
       }
-      downloadChecker();
-      return const SizedBox();
-    } else {
-      return const SizedBox();
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          downloadChecker();
+        }
+      });
     }
   }
 
@@ -231,6 +237,21 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    StartupProfiler.instance.mark('home_mounted');
+    _pageController.addListener(() {
+      final page = _pageController.page?.round();
+      if (page != null && !_visitedPages.contains(page)) {
+        setState(() {
+          _visitedPages.add(page);
+        });
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      StartupProfiler.instance.mark('home_first_content_rendered');
+      StartupProfiler.instance.mark('home_input_ready');
+      StartupProfiler.instance.dumpSummary();
+      _runDeferredStartupTasks();
+    });
   }
 
   @override
@@ -267,12 +288,16 @@ class _HomePageState extends State<HomePage> {
                         style: const TextStyle(
                           fontSize: 30.0,
                           fontWeight: FontWeight.w500,
+                          color: Colors.white,
                         ),
                         children: <TextSpan>[
                           TextSpan(
-                            text: appVersion == null ? '' : '\nv$appVersion',
+                            text: (appVersion == null || appVersion!.isEmpty)
+                                ? ''
+                                : '\nv$appVersion',
                             style: const TextStyle(
                               fontSize: 7.0,
+                              color: Colors.white,
                             ),
                           ),
                         ],
@@ -295,14 +320,10 @@ class _HomePageState extends State<HomePage> {
                         );
                       },
                       blendMode: BlendMode.dstIn,
-                      child: Image(
+                      child: const Image(
                         fit: BoxFit.cover,
                         alignment: Alignment.topCenter,
-                        image: AssetImage(
-                          Theme.of(context).brightness == Brightness.dark
-                              ? 'assets/header-dark.jpg'
-                              : 'assets/header.jpg',
-                        ),
+                        image: AssetImage('assets/header.jpg'),
                       ),
                     ),
                   ),
@@ -462,10 +483,10 @@ class _HomePageState extends State<HomePage> {
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(5, 30, 5, 20),
                           child: Center(
-                            child: Text(
-                              AppLocalizations.of(context)!.madeBy,
+                            child: const Text(
+                              'Made with ❤️ by Black Hole',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(fontSize: 12),
                             ),
                           ),
                         ),
@@ -568,15 +589,21 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       Expanded(
                         child: PageView(
-                          physics: const CustomPhysics(),
+                          physics: const PageScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
                           onPageChanged: (indx) {
                             _selectedIndex.value = indx;
+                            if (!_visitedPages.contains(indx)) {
+                              setState(() {
+                                _visitedPages.add(indx);
+                              });
+                            }
                           },
                           controller: _pageController,
                           children: [
                             Stack(
                               children: [
-                                checkVersion(),
                                 NestedScrollView(
                                   physics: const BouncingScrollPhysics(),
                                   controller: _scrollController,
@@ -584,9 +611,15 @@ class _HomePageState extends State<HomePage> {
                                     BuildContext context,
                                     bool innerBoxScrolled,
                                   ) {
+                                    final double textScale =
+                                        MediaQuery.textScalerOf(context).scale(1.0);
+                                    final double greetingExpandedHeight =
+                                        textScale > 1.0
+                                            ? 135.0 + (textScale - 1.0) * 55.0
+                                            : 135.0;
                                     return <Widget>[
                                       SliverAppBar(
-                                        expandedHeight: 135,
+                                        expandedHeight: greetingExpandedHeight,
                                         backgroundColor: Colors.transparent,
                                         elevation: 0,
                                         // pinned: true,
@@ -623,17 +656,25 @@ class _HomePageState extends State<HomePage> {
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: <Widget>[
-                                                    const SizedBox(
-                                                      height: 60,
+                                                    SizedBox(
+                                                      height: textScale > 1.15
+                                                          ? 40
+                                                          : 60,
                                                     ),
-                                                    Row(
-                                                      children: [
-                                                        Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                            left: 15.0,
-                                                          ),
+                                                    Align(
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                          left: 15.0,
+                                                          right: 15.0,
+                                                        ),
+                                                        child: FittedBox(
+                                                          fit: BoxFit.scaleDown,
+                                                          alignment: Alignment
+                                                              .centerLeft,
                                                           child: Text(
                                                             AppLocalizations.of(
                                                               context,
@@ -653,30 +694,37 @@ class _HomePageState extends State<HomePage> {
                                                             ),
                                                           ),
                                                         ),
-                                                      ],
-                                                    ),
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                        left: 15.0,
                                                       ),
-                                                      child: Row(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .end,
-                                                        children: [
-                                                          ValueListenableBuilder(
-                                                            valueListenable:
-                                                                Hive.box(
-                                                              'settings',
-                                                            ).listenable(),
-                                                            builder: (
-                                                              BuildContext
-                                                                  context,
-                                                              Box box,
-                                                              Widget? child,
-                                                            ) {
-                                                              return Text(
+                                                    ),
+                                                    Align(
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                          left: 15.0,
+                                                          right: 15.0,
+                                                        ),
+                                                        child:
+                                                            ValueListenableBuilder(
+                                                          valueListenable:
+                                                              Hive.box(
+                                                            'settings',
+                                                          ).listenable(),
+                                                          builder: (
+                                                            BuildContext
+                                                                context,
+                                                            Box box,
+                                                            Widget? child,
+                                                          ) {
+                                                            return FittedBox(
+                                                              fit: BoxFit
+                                                                  .scaleDown,
+                                                              alignment:
+                                                                  Alignment
+                                                                      .centerLeft,
+                                                              child: Text(
                                                                 (box.get('name') ==
                                                                             null ||
                                                                         box.get('name') ==
@@ -699,10 +747,10 @@ class _HomePageState extends State<HomePage> {
                                                                       FontWeight
                                                                           .w500,
                                                                 ),
-                                                              );
-                                                            },
-                                                          ),
-                                                        ],
+                                                              ),
+                                                            );
+                                                          },
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
@@ -854,13 +902,31 @@ class _HomePageState extends State<HomePage> {
                               ],
                             ),
                             if (sectionsToShow.contains('Top Charts'))
-                              TopCharts(
-                                pageController: _pageController,
-                              ),
-                            const YouTube(),
-                            const LibraryPage(),
+                              if (_visitedPages.contains(1))
+                                TopCharts(
+                                  pageController: _pageController,
+                                )
+                              else
+                                const SizedBox.shrink(),
+                            if (_visitedPages.contains(
+                              sectionsToShow.contains('Top Charts') ? 2 : 1,
+                            ))
+                              const YouTube()
+                            else
+                              const SizedBox.shrink(),
+                            if (_visitedPages.contains(
+                              sectionsToShow.contains('Top Charts') ? 3 : 2,
+                            ))
+                              const LibraryPage()
+                            else
+                              const SizedBox.shrink(),
                             if (sectionsToShow.contains('Settings'))
-                              NewSettingsPage(callback: callback),
+                              if (_visitedPages.contains(
+                                sectionsToShow.contains('Top Charts') ? 4 : 3,
+                              ))
+                                NewSettingsPage(callback: callback)
+                              else
+                                const SizedBox.shrink(),
                           ],
                         ),
                       ),
@@ -882,48 +948,73 @@ class _HomePageState extends State<HomePage> {
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 100),
                       height: 60,
-                      child: SalomonBottomBar(
-                        currentIndex: indexValue,
-                        onTap: (index) {
-                          _onItemTapped(index);
-                        },
-                        items: [
-                          SalomonBottomBarItem(
-                            icon: const Icon(Icons.home_rounded),
-                            title: Text(AppLocalizations.of(context)!.home),
-                            selectedColor:
-                                Theme.of(context).colorScheme.secondary,
-                          ),
-                          if (sectionsToShow.contains('Top Charts'))
-                            SalomonBottomBarItem(
-                              icon: const Icon(Icons.trending_up_rounded),
-                              title: Text(
-                                AppLocalizations.of(context)!.topCharts,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                                                child: SizedBox(
+                          width: () {
+                            final scale =
+                                MediaQuery.textScalerOf(context).scale(1.0);
+                            final base =
+                                screenWidth < 380 ? 380.0 : screenWidth;
+                            return base * (scale > 1.0 ? scale : 1.0);
+                          }(),
+                          child: SalomonBottomBar(
+                            margin: EdgeInsets.symmetric(
+                              horizontal: screenWidth < 350 ? 4.0 : 8.0,
+                              vertical: 4.0,
+                            ),
+                            itemPadding: EdgeInsets.symmetric(
+                              vertical: 10.0,
+                              horizontal: screenWidth < 350
+                                  ? 10.0
+                                  : (screenWidth < 380 ? 12.0 : 16.0),
+                            ),
+                            currentIndex: indexValue,
+                            onTap: (index) {
+                              _onItemTapped(index);
+                            },
+                            items: [
+                              SalomonBottomBarItem(
+                                icon: const Icon(Icons.home_rounded),
+                                title: Text(AppLocalizations.of(context)!.home),
+                                selectedColor:
+                                    Theme.of(context).colorScheme.secondary,
                               ),
-                              selectedColor:
-                                  Theme.of(context).colorScheme.secondary,
-                            ),
-                          SalomonBottomBarItem(
-                            icon: const Icon(MdiIcons.youtube),
-                            title: Text(AppLocalizations.of(context)!.youTube),
-                            selectedColor:
-                                Theme.of(context).colorScheme.secondary,
+                              if (sectionsToShow.contains('Top Charts'))
+                                SalomonBottomBarItem(
+                                  icon: const Icon(Icons.trending_up_rounded),
+                                  title: Text(
+                                    AppLocalizations.of(context)!.topCharts,
+                                  ),
+                                  selectedColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                ),
+                              SalomonBottomBarItem(
+                                icon: const Icon(MdiIcons.youtube),
+                                title:
+                                    Text(AppLocalizations.of(context)!.youTube),
+                                selectedColor:
+                                    Theme.of(context).colorScheme.secondary,
+                              ),
+                              SalomonBottomBarItem(
+                                icon: const Icon(Icons.my_library_music_rounded),
+                                title:
+                                    Text(AppLocalizations.of(context)!.library),
+                                selectedColor:
+                                    Theme.of(context).colorScheme.secondary,
+                              ),
+                              if (sectionsToShow.contains('Settings'))
+                                SalomonBottomBarItem(
+                                  icon: const Icon(Icons.settings_rounded),
+                                  title: Text(
+                                    AppLocalizations.of(context)!.settings,
+                                  ),
+                                  selectedColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                ),
+                            ],
                           ),
-                          SalomonBottomBarItem(
-                            icon: const Icon(Icons.my_library_music_rounded),
-                            title: Text(AppLocalizations.of(context)!.library),
-                            selectedColor:
-                                Theme.of(context).colorScheme.secondary,
-                          ),
-                          if (sectionsToShow.contains('Settings'))
-                            SalomonBottomBarItem(
-                              icon: const Icon(Icons.settings_rounded),
-                              title:
-                                  Text(AppLocalizations.of(context)!.settings),
-                              selectedColor:
-                                  Theme.of(context).colorScheme.secondary,
-                            ),
-                        ],
+                        ),
                       ),
                     );
                   },

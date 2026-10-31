@@ -18,6 +18,7 @@
  */
 
 import 'package:audio_service/audio_service.dart';
+import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Helpers/song_item.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -60,17 +61,17 @@ class MediaItemConverter {
       album: song['album'].toString(),
       artist: song['artist'].toString(),
       duration: Duration(
-        seconds: int.parse(
-          (song['duration'] == null ||
-                  song['duration'] == 'null' ||
-                  song['duration'] == '')
-              ? '180'
-              : song['duration'].toString(),
-        ),
+        seconds: (int.tryParse(FormatResponse.parseDuration(song['duration'])) ?? 0) > 0
+            ? (int.tryParse(FormatResponse.parseDuration(song['duration'])) ?? 0)
+            : 180,
       ),
       title: song['title'].toString(),
       artUri: Uri.parse(
-        getImageUrl(song['image'].toString()),
+        getImageUrl(
+          (song['image']?.toString() ?? '').isNotEmpty
+              ? song['image'].toString()
+              : (song['secondImage']?.toString() ?? ''),
+        ),
       ),
       genre: (song['genre'] ?? song['language']).toString(),
       extras: {
@@ -101,13 +102,9 @@ class MediaItemConverter {
       album: song['album'].toString(),
       artist: song['artist'].toString(),
       duration: Duration(
-        seconds: int.parse(
-          (song['duration'] == null ||
-                  song['duration'] == 'null' ||
-                  song['duration'] == '')
-              ? '180'
-              : song['duration'].toString(),
-        ),
+        seconds: (int.tryParse(FormatResponse.parseDuration(song['duration'])) ?? 0) > 0
+            ? (int.tryParse(FormatResponse.parseDuration(song['duration'])) ?? 0)
+            : 180,
       ),
       title: song['title'].toString(),
       artUri: Uri.file(song['image'].toString()),

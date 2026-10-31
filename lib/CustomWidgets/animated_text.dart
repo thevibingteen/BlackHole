@@ -76,23 +76,25 @@ class AnimatedText extends StatelessWidget {
           style: style,
         );
 
+        final scaler = MediaQuery.textScalerOf(context);
         final tp = TextPainter(
           maxLines: 1,
           textAlign: TextAlign.left,
           textDirection: TextDirection.ltr,
           text: span,
+          textScaler: scaler,
         );
 
         tp.layout(maxWidth: constraints.maxWidth);
 
         if (tp.didExceedMaxLines) {
           return SizedBox(
-            height: tp.height,
+            height: tp.height + 4.0,
             width: constraints.maxWidth,
             child: wrapped.Marquee(
               text: '  $text${" " * 30}',
               style: style,
-              textScaleFactor: textScaleFactor,
+              textScaleFactor: textScaleFactor ?? scaler.scale(1.0),
               textDirection: textDirection,
               scrollAxis: scrollAxis,
               crossAxisAlignment: crossAxisAlignment,

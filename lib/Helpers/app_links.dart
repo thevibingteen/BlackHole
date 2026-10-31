@@ -38,6 +38,19 @@ class AppLinks {
   static const String telegramChannelUrl = 'https://t.me/blackholerevived';
   static const String githubRepoUrl =
       'https://github.com/thevibingteen/BlackHole';
+  static const String appShareUrl = githubRepoUrl;
+
+  /// Checks whether [urlString] uses an approved external protocol (https, http, or mailto).
+  static bool isSchemeAllowed(String? urlString) {
+    if (urlString == null || urlString.trim().isEmpty) return false;
+    final uri = Uri.tryParse(urlString.trim());
+    if (uri == null) return false;
+    const allowedSchemes = {'https', 'http', 'mailto'};
+    return allowedSchemes.contains(uri.scheme.toLowerCase());
+  }
+
+  /// Returns canonical share message payload.
+  static String getShareAppPayload(String shareText) => '$shareText: $appShareUrl';
 
   // Optional test hook to mock external launcher without platform dependencies
   static UrlLauncherFunc? launchUrlOverride;
@@ -68,7 +81,27 @@ class AppLinks {
 
     try {
       final sanitized = urlString.trim();
-      final uri = Uri.parse(sanitized);
+      final uri = Uri.tryParse(sanitized);
+      if (uri == null) {
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            failureMessage ?? 'Invalid link format.',
+          );
+        }
+        return false;
+      }
+
+      const allowedSchemes = {'https', 'http', 'mailto'};
+      if (!allowedSchemes.contains(uri.scheme.toLowerCase())) {
+        if (context.mounted) {
+          ShowSnackBar().showSnackBar(
+            context,
+            'Opening unsupported or unsafe URI scheme "${uri.scheme}" is prohibited.',
+          );
+        }
+        return false;
+      }
 
       final launcher = launchUrlOverride ?? launchUrl;
       final success = await launcher(uri, mode: mode);

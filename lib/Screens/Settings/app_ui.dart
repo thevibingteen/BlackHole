@@ -27,10 +27,13 @@ class _AppUIPageState extends State<AppUIPage> {
     'preferredMiniButtons',
     defaultValue: ['Like', 'Play/Pause', 'Next'],
   )?.toList() as List;
-  List<int> preferredCompactNotificationButtons = Hive.box('settings').get(
-    'preferredCompactNotificationButtons',
-    defaultValue: [1, 2, 3],
-  ) as List<int>;
+  List<int> preferredCompactNotificationButtons = List<int>.from(
+    (Hive.box('settings').get(
+      'preferredCompactNotificationButtons',
+      defaultValue: [1, 2, 3],
+    ) as List)
+        .map((e) => (e is int) ? e : int.tryParse(e.toString()) ?? 1),
+  );
   final ValueNotifier<List> sectionsToShow = ValueNotifier<List>(
     Hive.box('settings').get(
       'sectionsToShow',

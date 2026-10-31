@@ -135,6 +135,119 @@ class AddToOffPlaylist {
       },
     );
   }
+
+  Future<void> addMultipleToOffPlaylist(
+    BuildContext context,
+    List<int> audioIds,
+  ) async {
+    if (audioIds.isEmpty) return;
+    List<PlaylistModel> playlistDetails =
+        await offlineAudioQuery.getPlaylists();
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      isDismissible: true,
+      backgroundColor: Colors.transparent,
+      context: context,
+      builder: (BuildContext context) {
+        return BottomGradientContainer(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: Text(AppLocalizations.of(context)!.createPlaylist),
+                  leading: Card(
+                    elevation: 0,
+                    color: Colors.transparent,
+                    child: SizedBox.square(
+                      dimension: 50,
+                      child: Center(
+                        child: Icon(
+                          Icons.add_rounded,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? null
+                              : Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                  ),
+                  onTap: () {
+                    showTextInputDialog(
+                      context: context,
+                      keyboardType: TextInputType.text,
+                      title: AppLocalizations.of(context)!.createNewPlaylist,
+                      onSubmitted: (String value) async {
+                        await offlineAudioQuery.createPlaylist(name: value);
+                        playlistDetails =
+                            await offlineAudioQuery.getPlaylists();
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                    );
+                  },
+                ),
+                if (playlistDetails.isEmpty)
+                  const SizedBox()
+                else
+                  ListView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
+                    itemCount: playlistDetails.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        leading: Card(
+                          margin: EdgeInsets.zero,
+                          elevation: 5,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7.0),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: QueryArtworkWidget(
+                            id: playlistDetails[index].id,
+                            type: ArtworkType.PLAYLIST,
+                            keepOldArtwork: true,
+                            artworkBorder: BorderRadius.circular(7.0),
+                            nullArtworkWidget: ClipRRect(
+                              borderRadius: BorderRadius.circular(7.0),
+                              child: const Image(
+                                fit: BoxFit.cover,
+                                height: 50.0,
+                                width: 50.0,
+                                image: AssetImage('assets/cover.jpg'),
+                              ),
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          playlistDetails[index].playlist,
+                        ),
+                        subtitle: Text(
+                          '${playlistDetails[index].numOfSongs} Songs',
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          for (final audioId in audioIds) {
+                            offlineAudioQuery.addToPlaylist(
+                              playlistId: playlistDetails[index].id,
+                              audioId: audioId,
+                            );
+                          }
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            '${audioIds.length} ${AppLocalizations.of(context)!.songs} ${AppLocalizations.of(context)!.addedTo} ${playlistDetails[index].playlist}',
+                          );
+                        },
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class AddToPlaylist {
@@ -178,18 +291,20 @@ class AddToPlaylist {
                       keyboardType: TextInputType.name,
                       title: AppLocalizations.of(context)!.createNewPlaylist,
                       onSubmitted: (String value) async {
-                        final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
-                        value.replaceAll(avoid, '').replaceAll('  ', ' ');
-                        if (value.trim() == '') {
-                          value = 'Playlist ${playlistNames.length}';
+                        final RegExp avoid = RegExp(r'[\.\\\*\:"\?#/;\|]');
+                        String name = value.replaceAll(avoid, '').replaceAll('  ', ' ');
+                        if (name.trim() == '') {
+                          name = 'Playlist ${playlistNames.length}';
                         }
-                        if (playlistNames.contains(value) ||
-                            await Hive.boxExists(value)) {
-                          value = '$value (1)';
+                        if (playlistNames.contains(name) ||
+                            await Hive.boxExists(name)) {
+                          name = '$name (1)';
                         }
-                        playlistNames.add(value);
+                        playlistNames.add(name);
                         settingsBox.put('playlistNames', playlistNames);
-                        Navigator.pop(context);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
                       },
                     );
                   },
@@ -244,6 +359,124 @@ class AddToPlaylist {
                               '${AppLocalizations.of(context)!.addedTo} ${playlistDetails.containsKey(playlistNames[index]) ? playlistDetails[playlistNames[index]]["name"] ?? playlistNames[index] : playlistNames[index]}',
                             );
                           }
+                        },
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void addMultipleToPlaylist(
+    BuildContext context,
+    List<MediaItem> mediaItems,
+  ) {
+    if (mediaItems.isEmpty) return;
+    showModalBottomSheet(
+      isDismissible: true,
+      backgroundColor: Colors.transparent,
+      context: context,
+      builder: (BuildContext context) {
+        return BottomGradientContainer(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: Text(AppLocalizations.of(context)!.createPlaylist),
+                  leading: Card(
+                    elevation: 0,
+                    color: Colors.transparent,
+                    child: SizedBox.square(
+                      dimension: 50,
+                      child: Center(
+                        child: Icon(
+                          Icons.add_rounded,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? null
+                              : Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                  ),
+                  onTap: () {
+                    showTextInputDialog(
+                      context: context,
+                      keyboardType: TextInputType.name,
+                      title: AppLocalizations.of(context)!.createNewPlaylist,
+                      onSubmitted: (String value) async {
+                        final RegExp avoid = RegExp(r'[\.\\\*\:"\?#/;\|]');
+                        String name = value.replaceAll(avoid, '').replaceAll('  ', ' ');
+                        if (name.trim() == '') {
+                          name = 'Playlist ${playlistNames.length}';
+                        }
+                        if (playlistNames.contains(name) ||
+                            await Hive.boxExists(name)) {
+                          name = '$name (1)';
+                        }
+                        playlistNames.add(name);
+                        settingsBox.put('playlistNames', playlistNames);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                    );
+                  },
+                ),
+                if (playlistNames.isEmpty)
+                  const SizedBox()
+                else
+                  ListView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    shrinkWrap: true,
+                    itemCount: playlistNames.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        leading: playlistDetails[playlistNames[index]] ==
+                                    null ||
+                                playlistDetails[playlistNames[index]]
+                                        ['imagesList'] ==
+                                    null
+                            ? Card(
+                                elevation: 5,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(7.0),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: const SizedBox.square(
+                                  dimension: 50,
+                                  child: Image(
+                                    image: AssetImage(
+                                      'assets/album.png',
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Collage(
+                                imageList: playlistDetails[playlistNames[index]]
+                                    ['imagesList'] as List,
+                                showGrid: true,
+                                placeholderImage: 'assets/cover.jpg',
+                              ),
+                        title: Text(
+                          '${playlistDetails.containsKey(playlistNames[index]) ? playlistDetails[playlistNames[index]]["name"] ?? playlistNames[index] : playlistNames[index]}',
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          for (final mediaItem in mediaItems) {
+                            addItemToPlaylist(
+                              playlistNames[index].toString(),
+                              mediaItem,
+                            );
+                          }
+                          ShowSnackBar().showSnackBar(
+                            context,
+                            '${mediaItems.length} ${AppLocalizations.of(context)!.songs} ${AppLocalizations.of(context)!.addedTo} ${playlistDetails.containsKey(playlistNames[index]) ? playlistDetails[playlistNames[index]]["name"] ?? playlistNames[index] : playlistNames[index]}',
+                          );
                         },
                       );
                     },

@@ -48,3 +48,15 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+android/build/
+ios/Flutter/ephemeral/
+
+# Keystore and signing credentials
+android/key.properties
+*.jks
+*.keystore
+*.p12
+
+# Local scratch and diagnostics
+scratch/

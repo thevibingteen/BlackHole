@@ -23,18 +23,16 @@ import 'package:blackhole/Helpers/songs_count.dart' as songs_count;
 import 'package:hive/hive.dart';
 
 bool checkPlaylist(String name, String key) {
-  if (name != 'Favorite Songs') {
-    Hive.openBox(name).then((value) {
-      return Hive.box(name).containsKey(key);
-    });
-  }
+  if (!Hive.isBoxOpen(name)) return false;
   return Hive.box(name).containsKey(key);
 }
 
 Future<void> removeLiked(String key) async {
+  if (!Hive.isBoxOpen('Favorite Songs')) {
+    await Hive.openBox('Favorite Songs');
+  }
   final Box likedBox = Hive.box('Favorite Songs');
   likedBox.delete(key);
-  // setState(() {});
 }
 
 Future<void> addMapToPlaylist(String name, Map info) async {
