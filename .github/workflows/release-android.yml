@@ -111,11 +111,11 @@ jobs:
 
       - name: Run verification test suite
         run: |
-          flutter test --reporter expanded
+          flutter test --no-pub --reporter expanded
 
       - name: Build split-per-ABI release APKs
         run: |
-          flutter build apk --release --split-per-abi
+          flutter build apk --no-pub --release --split-per-abi
 
       - name: Verify and package architecture-specific APKs
         id: package_apks
