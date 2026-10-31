@@ -22,15 +22,16 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:logging/logging.dart';
 
 class ShowSnackBar {
-  void showSnackBar(
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? showSnackBar(
     BuildContext context,
     String title, {
     SnackBarAction? action,
-    Duration duration = const Duration(seconds: 1),
+    Duration duration = const Duration(seconds: 3),
     bool noAction = false,
   }) {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      return ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           duration: duration,
           elevation: 6,
@@ -52,6 +53,7 @@ class ShowSnackBar {
       );
     } catch (e) {
       Logger.root.severe('Failed to show Snackbar with title: $title', e);
+      return null;
     }
   }
 }

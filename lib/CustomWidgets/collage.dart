@@ -58,6 +58,8 @@ class Collage extends StatelessWidget {
                     .map(
                       (image) => CachedNetworkImage(
                         fit: BoxFit.cover,
+                        memCacheWidth: 100,
+                        memCacheHeight: 100,
                         errorWidget: (context, _, __) => Image(
                           fit: BoxFit.cover,
                           image: AssetImage(placeholderImage),
@@ -75,6 +77,8 @@ class Collage extends StatelessWidget {
               )
             : CachedNetworkImage(
                 fit: BoxFit.cover,
+                memCacheWidth: 200,
+                memCacheHeight: 200,
                 errorWidget: (context, _, __) => Image(
                   fit: BoxFit.cover,
                   image: AssetImage(placeholderImage),

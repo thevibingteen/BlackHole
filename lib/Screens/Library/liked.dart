@@ -551,10 +551,13 @@ class _LikedSongsState extends State<LikedSongs>
                         child: CircularProgressIndicator(),
                       )
                     : TabBarView(
-                        physics: const CustomPhysics(),
+                        physics: const PageScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
                         controller: _tcontroller,
                         children: [
                           SongsTab(
+                            key: const PageStorageKey('liked_songs_tab'),
                             songs: _songs,
                             onDelete: (Map item) {
                               deleteLiked(item);
@@ -563,6 +566,7 @@ class _LikedSongsState extends State<LikedSongs>
                             scrollController: _scrollController,
                           ),
                           AlbumsTab(
+                            key: const PageStorageKey('liked_albums_tab'),
                             albums: _albums,
                             type: 'album',
                             offline: false,
@@ -570,6 +574,7 @@ class _LikedSongsState extends State<LikedSongs>
                             sortedAlbumKeysList: _sortedAlbumKeysList,
                           ),
                           AlbumsTab(
+                            key: const PageStorageKey('liked_artists_tab'),
                             albums: _artists,
                             type: 'artist',
                             offline: false,
@@ -577,6 +582,7 @@ class _LikedSongsState extends State<LikedSongs>
                             sortedAlbumKeysList: _sortedArtistKeysList,
                           ),
                           AlbumsTab(
+                            key: const PageStorageKey('liked_genres_tab'),
                             albums: _genres,
                             type: 'genre',
                             offline: false,
@@ -706,6 +712,8 @@ class _SongsTabState extends State<SongsTab>
                                 children: [
                                   CachedNetworkImage(
                                     fit: BoxFit.cover,
+                                    memCacheWidth: 200,
+                                    memCacheHeight: 200,
                                     errorWidget: (context, _, __) =>
                                         const Image(
                                       fit: BoxFit.cover,

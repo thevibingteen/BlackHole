@@ -99,7 +99,7 @@ class _AboutPageState extends State<AboutPage> {
                           );
 
                           final result =
-                              await GitHub.checkUpdate(appVersion ?? '1.15.8');
+                              await GitHub.checkUpdate(appVersion ?? '1.15.9');
                           if (!mounted) return;
 
                           switch (result.status) {
@@ -168,9 +168,9 @@ class _AboutPageState extends State<AboutPage> {
                         ),
                         onTap: () {
                           Share.share(
-                            '${AppLocalizations.of(
-                              context,
-                            )!.shareAppText}: https://sangwan5688.github.io/',
+                            AppLinks.getShareAppPayload(
+                              AppLocalizations.of(context)!.shareAppText,
+                            ),
                           );
                         },
                         dense: true,

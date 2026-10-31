@@ -26,6 +26,7 @@ import 'package:blackhole/CustomWidgets/gradient_containers.dart';
 import 'package:blackhole/CustomWidgets/miniplayer.dart';
 import 'package:blackhole/Screens/Common/song_list.dart';
 import 'package:blackhole/Screens/Search/artists.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -194,6 +195,8 @@ class _AlbumSearchPageState extends State<AlbumSearchPage> {
                                         clipBehavior: Clip.antiAlias,
                                         child: CachedNetworkImage(
                                           fit: BoxFit.cover,
+                                          memCacheWidth: 200,
+                                          memCacheHeight: 200,
                                           errorWidget: (context, _, __) =>
                                               Image(
                                             fit: BoxFit.cover,
@@ -203,8 +206,9 @@ class _AlbumSearchPageState extends State<AlbumSearchPage> {
                                                   : 'assets/album.png',
                                             ),
                                           ),
-                                          imageUrl:
-                                              '${entry["image"].replaceAll('http:', 'https:')}',
+                                          imageUrl: getImageUrl(
+                                            entry['image']?.toString(),
+                                          ),
                                           placeholder: (context, url) => Image(
                                             fit: BoxFit.cover,
                                             image: AssetImage(

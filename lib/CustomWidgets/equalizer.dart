@@ -35,10 +35,19 @@ class Equalizer extends StatefulWidget {
 class _EqualizerState extends State<Equalizer> {
   bool enabled =
       Hive.box('settings').get('setEqualizer', defaultValue: false) as bool;
-  AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
+  AudioPlayerHandler get audioHandler => GetIt.I<AudioPlayerHandler>();
 
   @override
   Widget build(BuildContext context) {
+    if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15.0),
+        ),
+        title: Text(AppLocalizations.of(context)!.equalizer),
+        content: const Text('Equalizer is unavailable when audio service is not running.'),
+      );
+    }
     return AlertDialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15.0),

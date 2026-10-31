@@ -44,21 +44,45 @@ class _DownloadButtonState extends State<DownloadButton> {
   final Box downloadsBox = Hive.box('downloads');
   final ValueNotifier<bool> showStopButton = ValueNotifier<bool>(false);
 
+  void _onDownloadUpdated() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     down = Download(widget.data['id'].toString());
-    down.addListener(() {
-      setState(() {});
-    });
+    down.addListener(_onDownloadUpdated);
+  }
+
+  @override
+  void didUpdateWidget(covariant DownloadButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data['id'].toString() != widget.data['id'].toString()) {
+      down.removeListener(_onDownloadUpdated);
+      down = Download(widget.data['id'].toString());
+      down.addListener(_onDownloadUpdated);
+    }
+  }
+
+  @override
+  void dispose() {
+    down.removeListener(_onDownloadUpdated);
+    showStopButton.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool isDownloaded =
+        downloadsBox.containsKey(widget.data['id']) ||
+        downloadsBox.containsKey(widget.data['id'].toString());
     return SizedBox.square(
       dimension: 50,
       child: Center(
-        child: (downloadsBox.containsKey(widget.data['id']))
+        child: isDownloaded
             ? IconButton(
                 icon: const Icon(Icons.download_done_rounded),
                 tooltip: 'Download Done',
@@ -168,19 +192,51 @@ class MultiDownloadButton extends StatefulWidget {
 
 class _MultiDownloadButtonState extends State<MultiDownloadButton> {
   late Download down;
+  final Box downloadsBox = Hive.box('downloads');
   int done = 0;
+
+  void _onDownloadUpdated() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    down = Download(widget.data.first['id'].toString());
-    down.addListener(() {
-      setState(() {});
-    });
+    down = Download(
+      widget.data.isEmpty ? '' : widget.data.first['id'].toString(),
+    );
+    down.addListener(_onDownloadUpdated);
+  }
+
+  @override
+  void didUpdateWidget(covariant MultiDownloadButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldId =
+        oldWidget.data.isEmpty ? '' : oldWidget.data.first['id'].toString();
+    final newId =
+        widget.data.isEmpty ? '' : widget.data.first['id'].toString();
+    if (oldId != newId) {
+      down.removeListener(_onDownloadUpdated);
+      down = Download(newId);
+      down.addListener(_onDownloadUpdated);
+    }
+  }
+
+  @override
+  void dispose() {
+    down.removeListener(_onDownloadUpdated);
+    super.dispose();
   }
 
   Future<void> _waitUntilDone(String id) async {
-    while (down.lastDownloadId != id) {
+    final itemDown = Download(id);
+    while (down.lastDownloadId != id &&
+        itemDown.lastDownloadId != id &&
+        Download.lastGlobalDownloadId != id &&
+        !downloadsBox.containsKey(id) &&
+        itemDown.progress != 0.0) {
       await Future.delayed(const Duration(seconds: 1));
     }
     return;
@@ -278,21 +334,47 @@ class AlbumDownloadButton extends StatefulWidget {
 
 class _AlbumDownloadButtonState extends State<AlbumDownloadButton> {
   late Download down;
+  final Box downloadsBox = Hive.box('downloads');
   int done = 0;
   List data = [];
   bool finished = false;
+
+  void _onDownloadUpdated() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     down = Download(widget.albumId);
-    down.addListener(() {
-      setState(() {});
-    });
+    down.addListener(_onDownloadUpdated);
+  }
+
+  @override
+  void didUpdateWidget(covariant AlbumDownloadButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.albumId != widget.albumId) {
+      down.removeListener(_onDownloadUpdated);
+      down = Download(widget.albumId);
+      down.addListener(_onDownloadUpdated);
+    }
+  }
+
+  @override
+  void dispose() {
+    down.removeListener(_onDownloadUpdated);
+    super.dispose();
   }
 
   Future<void> _waitUntilDone(String id) async {
-    while (down.lastDownloadId != id) {
+    final itemDown = Download(id);
+    while (down.lastDownloadId != id &&
+        itemDown.lastDownloadId != id &&
+        Download.lastGlobalDownloadId != id &&
+        !downloadsBox.containsKey(id) &&
+        itemDown.progress != 0.0) {
       await Future.delayed(const Duration(seconds: 1));
     }
     return;

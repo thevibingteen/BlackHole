@@ -21,11 +21,13 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
+import 'package:blackhole/Helpers/startup_profiler.dart';
 import 'package:blackhole/Screens/Player/audioplayer.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:logging/logging.dart';
 
 class MiniPlayer extends StatefulWidget {
   static const MiniPlayer _instance = MiniPlayer._internal();
@@ -41,10 +43,32 @@ class MiniPlayer extends StatefulWidget {
 }
 
 class _MiniPlayerState extends State<MiniPlayer> {
-  AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
+  AudioPlayerHandler? _audioHandler;
+
+  @override
+  void initState() {
+    super.initState();
+    if (GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      _audioHandler = GetIt.I<AudioPlayerHandler>();
+    } else if (!StartupProfiler.hasAudioServiceFailed) {
+      StartupProfiler.audioHandlerFuture.then((handler) {
+        if (mounted) {
+          setState(() {
+            _audioHandler = handler;
+          });
+        }
+      }).catchError((error) {
+        Logger.root.warning('MiniPlayer: AudioService initialization failed: $error');
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_audioHandler == null) {
+      return const SizedBox();
+    }
+    final AudioPlayerHandler audioHandler = _audioHandler!;
     final double screenWidth = MediaQuery.of(context).size.width;
     final double screenHeight = MediaQuery.of(context).size.height;
     final bool rotated = screenHeight < screenWidth;
@@ -89,49 +113,45 @@ class _MiniPlayerState extends State<MiniPlayer> {
                       stream: AudioService.position,
                       builder: (context, snapshot) {
                         final position = snapshot.data;
-                        return position == null
-                            ? const SizedBox()
-                            : (position.inSeconds.toDouble() < 0.0 ||
-                                    (position.inSeconds.toDouble() >
-                                        mediaItem.duration!.inSeconds
-                                            .toDouble()))
-                                ? const SizedBox()
-                                : SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      activeTrackColor: Theme.of(context)
-                                          .colorScheme
-                                          .secondary,
-                                      inactiveTrackColor: Colors.transparent,
-                                      trackHeight: 0.5,
-                                      thumbColor: Theme.of(context)
-                                          .colorScheme
-                                          .secondary,
-                                      thumbShape: const RoundSliderThumbShape(
-                                        enabledThumbRadius: 1.0,
-                                      ),
-                                      overlayColor: Colors.transparent,
-                                      overlayShape:
-                                          const RoundSliderOverlayShape(
-                                        overlayRadius: 2.0,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Slider(
-                                        inactiveColor: Colors.transparent,
-                                        // activeColor: Colors.white,
-                                        value: position.inSeconds.toDouble(),
-                                        max: mediaItem.duration!.inSeconds
-                                            .toDouble(),
-                                        onChanged: (newPosition) {
-                                          audioHandler.seek(
-                                            Duration(
-                                              seconds: newPosition.round(),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  );
+                        final durationSeconds =
+                            mediaItem.duration?.inSeconds.toDouble() ?? 0.0;
+                        if (position == null ||
+                            durationSeconds <= 0.0 ||
+                            position.inSeconds.toDouble() < 0.0 ||
+                            position.inSeconds.toDouble() > durationSeconds) {
+                          return const SizedBox();
+                        }
+                        return SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor:
+                                Theme.of(context).colorScheme.secondary,
+                            inactiveTrackColor: Colors.transparent,
+                            trackHeight: 0.5,
+                            thumbColor:
+                                Theme.of(context).colorScheme.secondary,
+                            thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 1.0,
+                            ),
+                            overlayColor: Colors.transparent,
+                            overlayShape: const RoundSliderOverlayShape(
+                              overlayRadius: 2.0,
+                            ),
+                          ),
+                          child: Center(
+                            child: Slider(
+                              inactiveColor: Colors.transparent,
+                              value: position.inSeconds.toDouble(),
+                              max: durationSeconds,
+                              onChanged: (newPosition) {
+                                audioHandler.seek(
+                                  Duration(
+                                    seconds: newPosition.round(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        );
                       },
                     ),
                     builder: (BuildContext context, Box box1, Widget? child) {
@@ -214,6 +234,12 @@ class _MiniPlayerState extends State<MiniPlayer> {
                                               dimension: useDense ? 40.0 : 50.0,
                                               child: CachedNetworkImage(
                                                 fit: BoxFit.cover,
+                                                fadeInDuration:
+                                                    const Duration(
+                                                  milliseconds: 200,
+                                                ),
+                                                memCacheWidth: 200,
+                                                memCacheHeight: 200,
                                                 errorWidget: (
                                                   BuildContext context,
                                                   _,

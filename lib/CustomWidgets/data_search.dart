@@ -279,6 +279,8 @@ class DownloadsSearch extends SearchDelegate {
                   )
                 : CachedNetworkImage(
                     fit: BoxFit.cover,
+                    memCacheWidth: 200,
+                    memCacheHeight: 200,
                     errorWidget: (context, _, __) => const Image(
                       fit: BoxFit.cover,
                       image: AssetImage('assets/cover.jpg'),
@@ -376,6 +378,8 @@ class DownloadsSearch extends SearchDelegate {
                   )
                 : CachedNetworkImage(
                     fit: BoxFit.cover,
+                    memCacheWidth: 200,
+                    memCacheHeight: 200,
                     errorWidget: (context, _, __) => const Image(
                       fit: BoxFit.cover,
                       image: AssetImage('assets/cover.jpg'),

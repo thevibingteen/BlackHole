@@ -27,6 +27,7 @@ import 'package:blackhole/CustomWidgets/miniplayer.dart';
 import 'package:blackhole/CustomWidgets/search_bar.dart' as searchbar;
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/CustomWidgets/song_tile_trailing_menu.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Screens/Common/song_list.dart';
 import 'package:blackhole/Screens/Search/albums.dart';
 import 'package:blackhole/Screens/Search/artists.dart';
@@ -589,6 +590,8 @@ class _SearchPageState extends State<SearchPage> {
                                                         Clip.antiAlias,
                                                     child: CachedNetworkImage(
                                                       fit: BoxFit.cover,
+                                                      memCacheWidth: 200,
+                                                      memCacheHeight: 200,
                                                       errorWidget:
                                                           (context, _, __) =>
                                                               Image(
@@ -605,8 +608,10 @@ class _SearchPageState extends State<SearchPage> {
                                                                   : 'assets/album.png',
                                                         ),
                                                       ),
-                                                      imageUrl:
-                                                          '${value[index]["image"].replaceAll('http:', 'https:')}',
+                                                      imageUrl: getImageUrl(
+                                                        value[index]['image']
+                                                            ?.toString(),
+                                                      ),
                                                       placeholder:
                                                           (context, url) =>
                                                               Image(

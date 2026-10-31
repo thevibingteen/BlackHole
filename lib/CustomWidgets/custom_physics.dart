@@ -20,18 +20,18 @@
 import 'package:flutter/material.dart';
 
 class CustomPhysics extends ScrollPhysics {
-  const CustomPhysics({super.parent});
+  const CustomPhysics({super.parent = const PageScrollPhysics()});
 
   @override
   CustomPhysics applyTo(ScrollPhysics? ancestor) {
-    return CustomPhysics(parent: buildParent(ancestor));
+    return CustomPhysics(parent: buildParent(ancestor ?? const PageScrollPhysics()));
   }
 
   @override
   SpringDescription get spring => const SpringDescription(
-        mass: 150,
+        mass: 80,
         stiffness: 100,
-        damping: 1,
+        damping: 20,
       );
 }
 

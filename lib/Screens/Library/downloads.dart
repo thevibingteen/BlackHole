@@ -21,7 +21,9 @@ import 'dart:io';
 
 import 'package:audiotagger/audiotagger.dart';
 import 'package:audiotagger/models/tag.dart';
-import 'package:blackhole/CustomWidgets/custom_physics.dart';
+import 'package:blackhole/CustomWidgets/add_playlist.dart';
+import 'package:blackhole/Helpers/mediaitem_converter.dart';
+import 'package:blackhole/Helpers/song_delete_helper.dart';
 import 'package:blackhole/CustomWidgets/data_search.dart';
 import 'package:blackhole/CustomWidgets/empty_screen.dart';
 import 'package:blackhole/CustomWidgets/gradient_containers.dart';
@@ -286,39 +288,63 @@ class _DownloadsState extends State<Downloads>
   }
 
   Future<void> deleteSong(Map song) async {
-    await downloadsBox.delete(song['id']);
-    final audioFile = File(song['path'].toString());
-    final imageFile = File(song['image'].toString());
-    if (_albums[song['album']]!.length == 1) {
-      _sortedAlbumKeysList.remove(song['album']);
-    }
-    _albums[song['album']]!.remove(song);
+    final String songId = song['id']?.toString() ?? '';
+    final String path = song['path']?.toString() ?? '';
+    final String image = song['image']?.toString() ?? '';
 
-    if (_artists[song['artist']]!.length == 1) {
-      _sortedArtistKeysList.remove(song['artist']);
-    }
-    _artists[song['artist']]!.remove(song);
+    await SongDeleteHelper.coordinateWithAudioHandler(songId, path);
 
-    if (_genres[song['genre']]!.length == 1) {
-      _sortedGenreKeysList.remove(song['genre']);
-    }
-    _genres[song['genre']]!.remove(song);
-
-    _songs.remove(song);
     try {
-      audioFile.delete();
-      if (await imageFile.exists()) {
-        imageFile.delete();
+      if (path.isNotEmpty && SongDeleteHelper.isPathSafeForDeletion(path)) {
+        final audioFile = File(path);
+        if (await audioFile.exists()) {
+          await audioFile.delete();
+        }
+      }
+      if (image.isNotEmpty &&
+          SongDeleteHelper.isPathSafeForDeletion(image, isArtwork: true)) {
+        final imageFile = File(image);
+        if (await imageFile.exists()) {
+          await imageFile.delete();
+        }
+      }
+      await downloadsBox.delete(song['id']);
+      if (Hive.isBoxOpen('Favorite Songs') && songId.isNotEmpty) {
+        await Hive.box('Favorite Songs').delete(songId);
+      }
+      if (_albums.containsKey(song['album'])) {
+        if (_albums[song['album']]!.length <= 1) {
+          _sortedAlbumKeysList.remove(song['album']);
+        }
+        _albums[song['album']]!.remove(song);
+      }
+      if (_artists.containsKey(song['artist'])) {
+        if (_artists[song['artist']]!.length <= 1) {
+          _sortedArtistKeysList.remove(song['artist']);
+        }
+        _artists[song['artist']]!.remove(song);
+      }
+      if (_genres.containsKey(song['genre'])) {
+        if (_genres[song['genre']]!.length <= 1) {
+          _sortedGenreKeysList.remove(song['genre']);
+        }
+        _genres[song['genre']]!.remove(song);
+      }
+      _songs.remove(song);
+      if (mounted) {
+        setState(() {});
       }
       ShowSnackBar().showSnackBar(
         context,
         '${AppLocalizations.of(context)!.deleted} ${song['title']}',
+        duration: const Duration(seconds: 3),
+        noAction: true,
       );
     } catch (e) {
-      Logger.root.severe('Failed to delete $audioFile.path', e);
+      Logger.root.severe('Failed to delete $path', e);
       ShowSnackBar().showSnackBar(
         context,
-        '${AppLocalizations.of(context)!.failedDelete}: ${audioFile.path}\nError: $e',
+        '${AppLocalizations.of(context)!.failedDelete}: $path\nError: $e',
       );
     }
   }
@@ -488,23 +514,28 @@ class _DownloadsState extends State<Downloads>
                         child: CircularProgressIndicator(),
                       )
                     : TabBarView(
-                        physics: const CustomPhysics(),
+                        physics: const PageScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
                         controller: _tcontroller,
                         children: [
                           DownSongsTab(
-                            onDelete: (Map item) {
-                              deleteSong(item);
+                            key: const PageStorageKey('downloads_songs_tab'),
+                            onDelete: (Map item) async {
+                              await deleteSong(item);
                             },
                             songs: _songs,
                             scrollController: _scrollController,
                           ),
                           AlbumsTab(
+                            key: const PageStorageKey('downloads_albums_tab'),
                             albums: _albums,
                             offline: true,
                             type: 'album',
                             sortedAlbumKeysList: _sortedAlbumKeysList,
                           ),
                           AlbumsTab(
+                            key: const PageStorageKey('downloads_artists_tab'),
                             albums: _artists,
                             type: 'artist',
                             // tempPath: tempPath,
@@ -512,6 +543,7 @@ class _DownloadsState extends State<Downloads>
                             sortedAlbumKeysList: _sortedArtistKeysList,
                           ),
                           AlbumsTab(
+                            key: const PageStorageKey('downloads_genres_tab'),
                             albums: _genres,
                             type: 'genre',
                             offline: true,
@@ -613,7 +645,14 @@ Future<Map> editTags(Map song, BuildContext context) async {
                     );
                     if (filePath != '') {
                       final imagePath = filePath;
-                      File(imagePath).copy(song['image'].toString());
+                      final String? destPath = song['image']?.toString();
+                      if (destPath != null && destPath.isNotEmpty) {
+                        try {
+                          await File(imagePath).copy(destPath);
+                        } catch (e) {
+                          Logger.root.warning('Failed to copy artwork file: $e');
+                        }
+                      }
 
                       songImage = FileImage(File(imagePath));
 
@@ -621,9 +660,9 @@ Future<Map> editTags(Map song, BuildContext context) async {
                         artwork: imagePath,
                       );
                       try {
-                        await [
-                          Permission.manageExternalStorage,
-                        ].request();
+                        if (Platform.isAndroid) {
+                          await Permission.manageExternalStorage.request();
+                        }
                         await tagger.writeTags(
                           path: song['path'].toString(),
                           tag: tag,
@@ -816,10 +855,10 @@ Future<Map> editTags(Map song, BuildContext context) async {
               );
               try {
                 try {
-                  await [
-                    Permission.manageExternalStorage,
-                  ].request();
-                  tagger.writeTags(
+                  if (Platform.isAndroid) {
+                    await Permission.manageExternalStorage.request();
+                  }
+                  await tagger.writeTags(
                     path: song['path'].toString(),
                     tag: tag,
                   );
@@ -862,7 +901,7 @@ Future<Map> editTags(Map song, BuildContext context) async {
 
 class DownSongsTab extends StatefulWidget {
   final List songs;
-  final Function(Map item) onDelete;
+  final Future<void> Function(Map item) onDelete;
   final ScrollController scrollController;
   const DownSongsTab({
     super.key,
@@ -877,6 +916,9 @@ class DownSongsTab extends StatefulWidget {
 
 class _DownSongsTabState extends State<DownSongsTab>
     with AutomaticKeepAliveClientMixin {
+  final Set<String> _selectedIds = {};
+  bool get _isSelectionMode => _selectedIds.isNotEmpty;
+
   Future<void> downImage(
     String imageFilePath,
     String songFilePath,
@@ -902,6 +944,95 @@ class _DownSongsTabState extends State<DownSongsTab>
   @override
   bool get wantKeepAlive => true;
 
+  Widget _buildSelectionToolbar(BuildContext context) {
+    final allSelected = _selectedIds.length == widget.songs.length;
+    return Container(
+      color: Theme.of(context).cardColor.withOpacity(0.9),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Clear Selection',
+            onPressed: () {
+              setState(() {
+                _selectedIds.clear();
+              });
+            },
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_selectedIds.length} Selected',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                if (allSelected) {
+                  _selectedIds.clear();
+                } else {
+                  _selectedIds.addAll(
+                    widget.songs.map((s) => s['id'].toString()),
+                  );
+                }
+              });
+            },
+            child: Text(allSelected ? 'Clear' : 'Select All'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.playlist_add_rounded),
+            tooltip: 'Add to Playlist',
+            onPressed: () {
+              final selectedSongs = widget.songs
+                  .where((s) => _selectedIds.contains(s['id'].toString()))
+                  .cast<Map>()
+                  .map((s) => MediaItemConverter.downMapToMediaItem(s))
+                  .toList();
+              AddToPlaylist().addMultipleToPlaylist(context, selectedSongs);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_rounded),
+            tooltip: 'Delete Selected',
+            onPressed: () async {
+              final selectedSongs = widget.songs
+                  .where((s) => _selectedIds.contains(s['id'].toString()))
+                  .cast<Map>()
+                  .toList();
+              final itemsToDelete = selectedSongs.map((s) => {
+                'id': s['id'].toString(),
+                'title': s['title'].toString(),
+                'path': s['path'].toString(),
+                'image': s['image']?.toString() ?? '',
+              }).toList();
+              final result = await SongDeleteHelper.deleteBulkSongs(
+                context: context,
+                itemsToDelete: itemsToDelete,
+                fromDownloads: true,
+              );
+              if (result.removedIds.isNotEmpty) {
+                for (final id in result.removedIds) {
+                  final itemIndex = widget.songs
+                      .indexWhere((s) => s['id'].toString() == id);
+                  if (itemIndex != -1) {
+                    await widget.onDelete(widget.songs[itemIndex] as Map);
+                  }
+                }
+                setState(() {
+                  _selectedIds.clear();
+                });
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -918,11 +1049,14 @@ class _DownSongsTabState extends State<DownSongsTab>
           )
         : Column(
             children: [
-              PlaylistHead(
-                songsList: widget.songs,
-                offline: true,
-                fromDownloads: true,
-              ),
+              if (_isSelectionMode)
+                _buildSelectionToolbar(context)
+              else
+                PlaylistHead(
+                  songsList: widget.songs,
+                  offline: true,
+                  fromDownloads: true,
+                ),
               Expanded(
                 child: ListView.builder(
                   controller: widget.scrollController,
@@ -932,48 +1066,66 @@ class _DownSongsTabState extends State<DownSongsTab>
                   itemCount: widget.songs.length,
                   itemExtent: 70.0,
                   itemBuilder: (context, index) {
+                    final songId = widget.songs[index]['id'].toString();
+                    final isSelected = _selectedIds.contains(songId);
                     return ListTile(
-                      leading: Card(
-                        elevation: 5,
-                        margin: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(7.0),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: SizedBox.square(
-                          dimension: 50,
-                          child: Image(
-                            fit: BoxFit.cover,
-                            image: FileImage(
-                              File(
-                                widget.songs[index]['image'].toString(),
+                      selected: isSelected,
+                      selectedTileColor: Theme.of(context)
+                          .colorScheme
+                          .secondary
+                          .withOpacity(0.15),
+                      leading: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isSelectionMode)
+                            Checkbox(
+                              value: isSelected,
+                              activeColor:
+                                  Theme.of(context).colorScheme.secondary,
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedIds.add(songId);
+                                  } else {
+                                    _selectedIds.remove(songId);
+                                  }
+                                });
+                              },
+                            ),
+                          Card(
+                            elevation: 5,
+                            margin: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7.0),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: SizedBox.square(
+                              dimension: 50,
+                              child: Image(
+                                fit: BoxFit.cover,
+                                image: FileImage(
+                                  File(
+                                    widget.songs[index]['image'].toString(),
+                                  ),
+                                ),
+                                errorBuilder: (_, __, ___) {
+                                  if (widget.songs[index]['image'] != null &&
+                                      widget.songs[index]['image_url'] != null) {
+                                    downImage(
+                                      widget.songs[index]['image'].toString(),
+                                      widget.songs[index]['path'].toString(),
+                                      widget.songs[index]['image_url'].toString(),
+                                    );
+                                  }
+                                  return Image.asset(
+                                    'assets/cover.jpg',
+                                  );
+                                },
                               ),
                             ),
-                            errorBuilder: (_, __, ___) {
-                              if (widget.songs[index]['image'] != null &&
-                                  widget.songs[index]['image_url'] != null) {
-                                downImage(
-                                  widget.songs[index]['image'].toString(),
-                                  widget.songs[index]['path'].toString(),
-                                  widget.songs[index]['image_url'].toString(),
-                                );
-                              }
-                              return Image.asset(
-                                'assets/cover.jpg',
-                              );
-                            },
                           ),
-                        ),
+                        ],
                       ),
-                      onTap: () {
-                        PlayerInvoke.init(
-                          songsList: widget.songs,
-                          index: index,
-                          isOffline: true,
-                          fromDownloads: true,
-                          recommend: false,
-                        );
-                      },
                       title: Text(
                         '${widget.songs[index]['title']}',
                         overflow: TextOverflow.ellipsis,
@@ -982,79 +1134,176 @@ class _DownSongsTabState extends State<DownSongsTab>
                         '${widget.songs[index]['artist'] ?? 'Artist name'}',
                         overflow: TextOverflow.ellipsis,
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          PopupMenuButton(
-                            icon: const Icon(
-                              Icons.more_vert_rounded,
-                            ),
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(15.0),
-                              ),
-                            ),
-                            itemBuilder: (context) => [
-                              PopupMenuItem(
-                                value: 0,
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.edit_rounded,
+                      trailing: _isSelectionMode
+                          ? null
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PopupMenuButton(
+                                  icon: const Icon(
+                                    Icons.more_vert_rounded,
+                                  ),
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(15.0),
                                     ),
-                                    const SizedBox(
-                                      width: 10.0,
+                                  ),
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 0,
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.edit_rounded,
+                                          ),
+                                          const SizedBox(
+                                            width: 10.0,
+                                          ),
+                                          Text(
+                                            AppLocalizations.of(
+                                              context,
+                                            )!
+                                                .edit,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    Text(
-                                      AppLocalizations.of(
-                                        context,
-                                      )!
-                                          .edit,
+                                    PopupMenuItem(
+                                      value: 1,
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.delete_rounded,
+                                          ),
+                                          const SizedBox(
+                                            width: 10.0,
+                                          ),
+                                          Text(
+                                            AppLocalizations.of(
+                                              context,
+                                            )!
+                                                .delete,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 2,
+                                      child: Row(
+                                        children: const [
+                                          Icon(
+                                            Icons.check_box_outlined,
+                                          ),
+                                          SizedBox(
+                                            width: 10.0,
+                                          ),
+                                          Text(
+                                            'Select',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 3,
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.playlist_add_rounded,
+                                          ),
+                                          const SizedBox(
+                                            width: 10.0,
+                                          ),
+                                          Text(
+                                            AppLocalizations.of(
+                                              context,
+                                            )!
+                                                .addToPlaylist,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: 1,
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.delete_rounded,
-                                    ),
-                                    const SizedBox(
-                                      width: 10.0,
-                                    ),
-                                    Text(
-                                      AppLocalizations.of(
+                                  onSelected: (int? value) async {
+                                    if (value == 0) {
+                                      widget.songs[index] = await editTags(
+                                        widget.songs[index] as Map,
                                         context,
-                                      )!
-                                          .delete,
-                                    ),
-                                  ],
+                                      );
+                                      Hive.box('downloads').put(
+                                        widget.songs[index]['id'],
+                                        widget.songs[index],
+                                      );
+                                      setState(() {});
+                                    }
+                                    if (value == 1) {
+                                      final songToDelete =
+                                          widget.songs[index] as Map;
+                                      final outcome =
+                                          await SongDeleteHelper.deleteSingleSong(
+                                        context: context,
+                                        id: songToDelete['id'].toString(),
+                                        title: songToDelete['title'].toString(),
+                                        filePath:
+                                            songToDelete['path'].toString(),
+                                        imagePath:
+                                            songToDelete['image']?.toString(),
+                                        fromDownloads: true,
+                                      );
+                                      if (outcome ==
+                                              DeleteOutcome.fileDeleted ||
+                                          outcome ==
+                                              DeleteOutcome.staleRecordRemoved) {
+                                        await widget.onDelete(songToDelete);
+                                        if (mounted) {
+                                          setState(() {});
+                                        }
+                                      }
+                                    }
+                                    if (value == 2) {
+                                      setState(() {
+                                        _selectedIds.add(songId);
+                                      });
+                                    }
+                                    if (value == 3) {
+                                      AddToPlaylist().addToPlaylist(
+                                        context,
+                                        MediaItemConverter.downMapToMediaItem(
+                                          widget.songs[index] as Map,
+                                        ),
+                                      );
+                                    }
+                                  },
                                 ),
-                              ),
-                            ],
-                            onSelected: (int? value) async {
-                              if (value == 0) {
-                                widget.songs[index] = await editTags(
-                                  widget.songs[index] as Map,
-                                  context,
-                                );
-                                Hive.box('downloads').put(
-                                  widget.songs[index]['id'],
-                                  widget.songs[index],
-                                );
-                                setState(() {});
-                              }
-                              if (value == 1) {
-                                setState(() {
-                                  widget.onDelete(widget.songs[index] as Map);
-                                });
-                              }
-                            },
-                          ),
-                        ],
-                      ),
+                              ],
+                            ),
+                      onTap: () {
+                        if (_isSelectionMode) {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedIds.remove(songId);
+                            } else {
+                              _selectedIds.add(songId);
+                            }
+                          });
+                        } else {
+                          PlayerInvoke.init(
+                            songsList: widget.songs,
+                            index: index,
+                            isOffline: true,
+                            fromDownloads: true,
+                            recommend: false,
+                          );
+                        }
+                      },
+                      onLongPress: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedIds.remove(songId);
+                          } else {
+                            _selectedIds.add(songId);
+                          }
+                        });
+                      },
                     );
                   },
                 ),

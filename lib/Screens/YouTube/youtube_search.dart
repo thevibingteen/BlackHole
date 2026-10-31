@@ -24,6 +24,7 @@ import 'package:blackhole/CustomWidgets/search_bar.dart' as searchbar;
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/CustomWidgets/song_tile_trailing_menu.dart';
 import 'package:blackhole/Screens/YouTube/youtube_artist.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Screens/YouTube/youtube_playlist.dart';
 import 'package:blackhole/Services/player_service.dart';
 import 'package:blackhole/Services/youtube_services.dart';
@@ -60,7 +61,35 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
       Hive.box('settings').get('searchYtMusic', defaultValue: true) as bool;
   // bool showHistory =
   // Hive.box('settings').get('showHistory', defaultValue: true) as bool;
+  int _searchToken = 0;
   final TextEditingController _controller = TextEditingController();
+
+  String _formatSubtitle(Map item) {
+    final rawSubtitle = item['subtitle']?.toString().trim();
+    if (rawSubtitle != null &&
+        rawSubtitle.isNotEmpty &&
+        rawSubtitle.toLowerCase() != 'null') {
+      return rawSubtitle;
+    }
+    final rawArtist = (item['artist'] ??
+            item['channel'] ??
+            item['author'] ??
+            item['uploader'])
+        ?.toString()
+        .trim();
+    if (rawArtist != null &&
+        rawArtist.isNotEmpty &&
+        rawArtist.toLowerCase() != 'null') {
+      return rawArtist;
+    }
+    final rawDesc = item['description']?.toString().trim();
+    if (rawDesc != null &&
+        rawDesc.isNotEmpty &&
+        rawDesc.toLowerCase() != 'null') {
+      return rawDesc;
+    }
+    return 'YouTube Video';
+  }
 
   @override
   void initState() {
@@ -87,25 +116,31 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
       if (query.isEmpty && widget.query.isEmpty) {
         fetched = true;
       } else {
+        final int currentToken = ++_searchToken;
+        final String effectiveQuery = query == '' ? widget.query : query;
         if (searchYtMusic) {
           Logger.root.info('calling yt music search');
           YtMusicService()
-              .search(query == '' ? widget.query : query)
+              .search(effectiveQuery)
               .then((value) {
-            setState(() {
-              searchedList = value;
-              fetched = true;
-            });
+            if (mounted && currentToken == _searchToken) {
+              setState(() {
+                searchedList = value;
+                fetched = true;
+              });
+            }
           });
         } else {
           Logger.root.info('calling youtube search');
           YouTubeServices()
-              .fetchSearchResults(query == '' ? widget.query : query)
+              .fetchSearchResults(effectiveQuery)
               .then((value) {
-            setState(() {
-              searchedList = value;
-              fetched = true;
-            });
+            if (mounted && currentToken == _searchToken) {
+              setState(() {
+                searchedList = value;
+                fetched = true;
+              });
+            }
           });
         }
       }
@@ -464,10 +499,7 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                               ),
                                                             ),
                                                             subtitle: Text(
-                                                              section['items']
-                                                                          [idx][
-                                                                      'subtitle']
-                                                                  .toString(),
+                                                              _formatSubtitle(section['items'][idx] as Map),
                                                               overflow:
                                                                   TextOverflow
                                                                       .ellipsis,
@@ -498,6 +530,10 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                                   CachedNetworkImage(
                                                                 fit: BoxFit
                                                                     .cover,
+                                                                memCacheWidth:
+                                                                    200,
+                                                                memCacheHeight:
+                                                                    200,
                                                                 errorWidget: (
                                                                   context,
                                                                   _,
@@ -511,12 +547,12 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                                     'assets/cover.jpg',
                                                                   ),
                                                                 ),
-                                                                imageUrl: section['items']
-                                                                            [
-                                                                            idx]
-                                                                        [
-                                                                        'image']
-                                                                    .toString(),
+                                                                imageUrl: getImageUrl(
+                                                                  section['items']
+                                                                          [idx]
+                                                                          ['image']
+                                                                      ?.toString(),
+                                                                ),
                                                                 placeholder: (
                                                                   context,
                                                                   url,
@@ -534,7 +570,11 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                             trailing: (itemType ==
                                                                         'Song' ||
                                                                     itemType ==
-                                                                        'Video')
+                                                                        'Video' ||
+                                                                    itemType.toLowerCase() ==
+                                                                        'song' ||
+                                                                    itemType.toLowerCase() ==
+                                                                        'video')
                                                                 ? YtSongTileTrailingMenu(
                                                                     data: section['items']
                                                                             [
@@ -584,7 +624,11 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                               if (itemType ==
                                                                       'Song' ||
                                                                   itemType ==
-                                                                      'Video') {
+                                                                      'Video' ||
+                                                                  itemType.toLowerCase() ==
+                                                                      'song' ||
+                                                                  itemType.toLowerCase() ==
+                                                                      'video') {
                                                                 setState(() {
                                                                   done = false;
                                                                 });
@@ -604,7 +648,7 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                                 );
                                                                 if (response !=
                                                                     null) {
-                                                                  PlayerInvoke
+                                                                  await PlayerInvoke
                                                                       .init(
                                                                     songsList: [
                                                                       response
@@ -617,8 +661,8 @@ class _YouTubeSearchPageState extends State<YouTubeSearchPage> {
                                                                 setState(() {
                                                                   done = true;
                                                                 });
-                                                                if (itemType ==
-                                                                        'Song' &&
+                                                                if (itemType.toLowerCase() ==
+                                                                        'song' &&
                                                                     response !=
                                                                         null) {
                                                                   YtMusicService()

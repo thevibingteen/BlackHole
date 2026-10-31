@@ -20,6 +20,7 @@
 import 'package:blackhole/APIs/api.dart';
 import 'package:blackhole/CustomWidgets/custom_physics.dart';
 import 'package:blackhole/CustomWidgets/empty_screen.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Services/player_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -220,7 +221,9 @@ class _TopChartsState extends State<TopCharts>
             return true;
           },
           child: TabBarView(
-            physics: const CustomPhysics(),
+            physics: const PageScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
             children: [
               ValueListenableBuilder(
                 valueListenable: Hive.box('settings').listenable(),
@@ -384,8 +387,15 @@ class _TopPageState extends State<TopPage>
                             if (showList[index]['image_url_small'] != '')
                               CachedNetworkImage(
                                 fit: BoxFit.cover,
-                                imageUrl: showList[index]['image_url_small']
-                                    .toString(),
+                                memCacheWidth: 200,
+                                memCacheHeight: 200,
+                                imageUrl: getImageUrl(
+                                  (showList[index]['image_url_big'] != null &&
+                                          showList[index]['image_url_big'] != '')
+                                      ? showList[index]['image_url_big'].toString()
+                                      : showList[index]['image_url_small']
+                                          .toString(),
+                                ),
                                 errorWidget: (context, _, __) => const Image(
                                   fit: BoxFit.cover,
                                   image: AssetImage('assets/cover.jpg'),

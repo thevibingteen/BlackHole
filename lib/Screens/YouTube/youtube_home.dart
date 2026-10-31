@@ -18,6 +18,7 @@
  */
 
 import 'package:blackhole/CustomWidgets/on_hover.dart';
+import 'package:blackhole/Helpers/image_resolution_modifier.dart';
 import 'package:blackhole/Screens/YouTube/youtube_playlist.dart';
 import 'package:blackhole/Screens/YouTube/youtube_search.dart';
 import 'package:blackhole/Services/youtube_services.dart';
@@ -157,13 +158,17 @@ class _YouTubeState extends State<YouTube>
                           clipBehavior: Clip.antiAlias,
                           child: CachedNetworkImage(
                             fit: BoxFit.cover,
+                            memCacheWidth: 600,
+                            memCacheHeight: 400,
                             errorWidget: (context, _, __) => const Image(
                               fit: BoxFit.cover,
                               image: AssetImage(
                                 'assets/ytCover.png',
                               ),
                             ),
-                            imageUrl: headList[index]['image'].toString(),
+                            imageUrl: getImageUrl(
+                              headList[index]['image']?.toString(),
+                            ),
                             placeholder: (context, url) => const Image(
                               fit: BoxFit.cover,
                               image: AssetImage('assets/ytCover.png'),
@@ -180,22 +185,21 @@ class _YouTubeState extends State<YouTube>
                     itemBuilder: (context, index) {
                       return Column(
                         children: [
-                          Row(
-                            children: [
-                              Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(10, 10, 0, 5),
-                                child: Text(
-                                  '${searchedList[index]["title"]}',
-                                  style: TextStyle(
-                                    color:
-                                        Theme.of(context).colorScheme.secondary,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 5),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '${searchedList[index]["title"]}',
+                                style: TextStyle(
+                                  color:
+                                      Theme.of(context).colorScheme.secondary,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
                                 ),
+                                softWrap: true,
                               ),
-                            ],
+                            ),
                           ),
                           SizedBox(
                             height: boxSize + 10,
@@ -273,6 +277,8 @@ class _YouTubeState extends State<YouTube>
                                                         Clip.antiAlias,
                                                     child: CachedNetworkImage(
                                                       fit: BoxFit.cover,
+                                                      memCacheWidth: 300,
+                                                      memCacheHeight: 300,
                                                       errorWidget:
                                                           (context, _, __) =>
                                                               Image(
@@ -286,8 +292,10 @@ class _YouTubeState extends State<YouTube>
                                                                 'assets/cover.jpg',
                                                               ),
                                                       ),
-                                                      imageUrl: item['image']
-                                                          .toString(),
+                                                      imageUrl: getImageUrl(
+                                                        item['image']
+                                                            ?.toString(),
+                                                      ),
                                                       placeholder:
                                                           (context, url) =>
                                                               Image(
@@ -366,7 +374,11 @@ class _YouTubeState extends State<YouTube>
                                                       TextOverflow.ellipsis,
                                                 ),
                                                 Text(
-                                                  item['subtitle'].toString(),
+                                                  (item['subtitle'] == null ||
+                                                          item['subtitle'].toString().trim().isEmpty ||
+                                                          item['subtitle'].toString().trim().toLowerCase() == 'null')
+                                                      ? 'YouTube Video'
+                                                      : item['subtitle'].toString(),
                                                   textAlign: TextAlign.center,
                                                   softWrap: false,
                                                   overflow:

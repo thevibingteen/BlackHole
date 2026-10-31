@@ -31,6 +31,7 @@ class AppTheme {
     required BuildContext context,
   }) {
     return ThemeData(
+      useMaterial3: false,
       textSelectionTheme: TextSelectionThemeData(
         selectionHandleColor: currentTheme.currentColor(),
         cursorColor: currentTheme.currentColor(),
@@ -60,7 +61,7 @@ class AppTheme {
                   : Brightness.dark,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         clipBehavior: Clip.antiAlias,
         elevation: 5,
         shape: RoundedRectangleBorder(
@@ -89,6 +90,7 @@ class AppTheme {
     required BuildContext context,
   }) {
     return ThemeData(
+      useMaterial3: false,
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: Colors.white,
@@ -120,7 +122,7 @@ class AppTheme {
       ),
       canvasColor: currentTheme.getCanvasColor(),
       cardColor: currentTheme.getCardColor(),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         clipBehavior: Clip.antiAlias,
         elevation: 5,
         shape: RoundedRectangleBorder(
@@ -140,6 +142,8 @@ class AppTheme {
             primary: Colors.white,
             secondary: currentTheme.currentColor(),
             brightness: Brightness.dark,
+            surface: currentTheme.getCardColor(),
+            onSurface: Colors.white,
           ),
     );
   }

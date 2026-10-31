@@ -281,6 +281,8 @@ class _SongsListState extends State<SongsList> {
                                         )
                                       : CachedNetworkImage(
                                           fit: BoxFit.cover,
+                                          memCacheWidth: 200,
+                                          memCacheHeight: 200,
                                           errorWidget: (context, _, __) =>
                                               const Image(
                                             fit: BoxFit.cover,

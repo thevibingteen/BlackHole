@@ -87,6 +87,13 @@ class _PlaylistPopupMenuState extends State<PlaylistPopupMenu> {
           );
         }
         if (value == 0) {
+          if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+            ShowSnackBar().showSnackBar(
+              context,
+              AppLocalizations.of(context)!.nothingPlaying,
+            );
+            return;
+          }
           final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
           final MediaItem? currentMediaItem = audioHandler.mediaItem.value;
           if (currentMediaItem != null &&

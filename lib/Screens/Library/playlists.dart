@@ -489,6 +489,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                     ShowSnackBar().showSnackBar(
                                       context,
                                       '${AppLocalizations.of(context)!.deleted} $showName',
+                                      duration: const Duration(seconds: 3),
+                                      noAction: true,
                                     );
                                     playlistDetails.remove(name);
                                     await settingsBox.put(

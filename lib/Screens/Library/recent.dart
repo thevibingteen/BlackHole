@@ -128,6 +128,8 @@ class _RecentlyPlayedState extends State<RecentlyPlayed> {
                                       dimension: 55.0,
                                       child: CachedNetworkImage(
                                         fit: BoxFit.cover,
+                                        memCacheWidth: 200,
+                                        memCacheHeight: 200,
                                         errorWidget: (context, _, __) =>
                                             const Image(
                                           fit: BoxFit.cover,

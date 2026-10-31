@@ -50,6 +50,9 @@ Widget imageCard(
           )
         : CachedNetworkImage(
             fit: BoxFit.cover,
+            fadeInDuration: const Duration(milliseconds: 200),
+            memCacheWidth: 250,
+            memCacheHeight: 250,
             errorWidget: (context, _, __) => const Image(
               fit: BoxFit.cover,
               image: AssetImage('assets/cover.jpg'),

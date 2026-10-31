@@ -29,6 +29,7 @@ class LocalPlaylists extends StatefulWidget {
   final List<PlaylistModel> playlistDetails;
   final OfflineAudioQuery offlineAudioQuery;
   const LocalPlaylists({
+    super.key,
     required this.playlistDetails,
     required this.offlineAudioQuery,
   });
@@ -140,6 +141,8 @@ class _LocalPlaylistsState extends State<LocalPlaylists> {
                           ShowSnackBar().showSnackBar(
                             context,
                             '${AppLocalizations.of(context)!.deleted} ${playlistDetails[index].playlist}',
+                            duration: const Duration(seconds: 3),
+                            noAction: true,
                           );
                           playlistDetails.removeAt(index);
                           setState(() {});

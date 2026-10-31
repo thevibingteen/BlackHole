@@ -31,6 +31,7 @@ import 'package:blackhole/CustomWidgets/playlist_popupmenu.dart';
 import 'package:blackhole/CustomWidgets/snackbar.dart';
 import 'package:blackhole/CustomWidgets/song_tile_trailing_menu.dart';
 import 'package:blackhole/Helpers/image_resolution_modifier.dart';
+import 'package:blackhole/Helpers/radio_helper.dart';
 import 'package:blackhole/Screens/Common/song_list.dart';
 import 'package:blackhole/Services/player_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -68,15 +69,28 @@ class _ArtistSearchPageState extends State<ArtistSearchPage> {
   Widget build(BuildContext context) {
     if (!status) {
       status = true;
+      final String artistToken = (widget.data['artistToken'] != null &&
+              widget.data['artistToken'].toString().isNotEmpty)
+          ? widget.data['artistToken'].toString()
+          : (widget.data['perma_url'] ?? widget.data['url'])
+                  ?.toString()
+                  .split('/')
+                  .last ??
+              widget.data['id']?.toString() ??
+              '';
       SaavnAPI()
           .fetchArtistSongs(
-        artistToken: widget.data['artistToken'].toString(),
+        artistToken: artistToken,
         category: category,
         sortOrder: sortOrder,
       )
           .then((value) {
         setState(() {
           data = value;
+          fetched = true;
+        });
+      }).catchError((e) {
+        setState(() {
           fetched = true;
         });
       });
@@ -221,80 +235,28 @@ class _ArtistSearchPageState extends State<ArtistSearchPage> {
                                       Expanded(
                                         child: GestureDetector(
                                           onTap: () async {
-                                            ShowSnackBar().showSnackBar(
-                                              context,
-                                              AppLocalizations.of(
-                                                context,
-                                              )!
-                                                  .connectingRadio,
-                                              duration: const Duration(
-                                                seconds: 2,
-                                              ),
+                                            final artistName = widget
+                                                        .data['title']
+                                                    ?.toString()
+                                                    .isNotEmpty ==
+                                                true
+                                            ? widget.data['title'].toString()
+                                            : (widget.data['name']
+                                                        ?.toString()
+                                                        .isNotEmpty ==
+                                                    true
+                                                ? widget.data['name']
+                                                    .toString()
+                                                : '');
+                                            final lang = widget.data['language']
+                                                ?.toString();
+                                            await RadioConnectionHandler.connectAndPlay(
+                                              context: context,
+                                              stationName: artistName,
+                                              stationType: 'artist',
+                                              language: lang,
+                                              shuffle: false,
                                             );
-                                            try {
-                                              final artistName = widget
-                                                          .data['title']
-                                                      ?.toString()
-                                                      .isNotEmpty ==
-                                                  true
-                                              ? widget.data['title'].toString()
-                                              : (widget.data['name']
-                                                          ?.toString()
-                                                          .isNotEmpty ==
-                                                      true
-                                                  ? widget.data['name']
-                                                      .toString()
-                                                  : '');
-                                              final lang = widget.data['language']
-                                                  ?.toString();
-                                              final stationId = await SaavnAPI()
-                                                  .createRadio(
-                                                names: [artistName],
-                                                language: lang,
-                                                stationType: 'artist',
-                                              );
-                                              if (stationId != null &&
-                                                  stationId.isNotEmpty) {
-                                                final songs = await SaavnAPI()
-                                                    .getRadioSongs(
-                                                  stationId: stationId,
-                                                );
-                                                if (songs.isNotEmpty) {
-                                                  PlayerInvoke.init(
-                                                    songsList: songs,
-                                                    index: 0,
-                                                    isOffline: false,
-                                                  );
-                                                  if (context.mounted) {
-                                                    Navigator.pushNamed(
-                                                      context,
-                                                      '/player',
-                                                    );
-                                                  }
-                                                } else {
-                                                  if (context.mounted) {
-                                                    ShowSnackBar().showSnackBar(
-                                                      context,
-                                                      'Failed to connect to Radio',
-                                                    );
-                                                  }
-                                                }
-                                              } else {
-                                                if (context.mounted) {
-                                                  ShowSnackBar().showSnackBar(
-                                                    context,
-                                                    'Failed to connect to Radio',
-                                                  );
-                                                }
-                                              }
-                                            } catch (e) {
-                                              if (context.mounted) {
-                                                ShowSnackBar().showSnackBar(
-                                                  context,
-                                                  'Failed to connect to Radio',
-                                                );
-                                              }
-                                            }
                                           },
                                           child: Container(
                                             margin: const EdgeInsets.symmetric(
@@ -665,6 +627,8 @@ class _ArtistSearchPageState extends State<ArtistSearchPage> {
                                                   clipBehavior: Clip.antiAlias,
                                                   child: CachedNetworkImage(
                                                     fit: BoxFit.cover,
+                                                    memCacheWidth: 200,
+                                                    memCacheHeight: 200,
                                                     errorWidget:
                                                         (context, _, __) =>
                                                             Image(
@@ -678,8 +642,10 @@ class _ArtistSearchPageState extends State<ArtistSearchPage> {
                                                             : 'assets/album.png',
                                                       ),
                                                     ),
-                                                    imageUrl:
-                                                        '${entry.value[index]["image"].replaceAll('http:', 'https:')}',
+                                                    imageUrl: getImageUrl(
+                                                      entry.value[index]['image']
+                                                          ?.toString(),
+                                                    ),
                                                     placeholder:
                                                         (context, url) => Image(
                                                       fit: BoxFit.cover,
