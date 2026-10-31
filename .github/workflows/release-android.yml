@@ -91,6 +91,8 @@ jobs:
       - name: Resolve dependencies
         run: |
           flutter pub get
+          mkdir -p .dart_tool/flutter_gen/gen_l10n
+          cp lib/localization/*.dart .dart_tool/flutter_gen/gen_l10n/
           python3 -c "
           import json, os
           path = '.dart_tool/package_config.json'
