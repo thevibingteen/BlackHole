@@ -1,3 +1,4 @@
+import 'package:logging/logging.dart';
 /*
  *  This file is part of BlackHole (https://github.com/Sangwan5688/BlackHole).
  * 
@@ -29,6 +30,10 @@ void addToNowPlaying({
   required MediaItem mediaItem,
   bool showNotification = true,
 }) {
+  if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+    Logger.root.warning("Cannot add to queue: AudioPlayerHandler not registered");
+    return;
+  }
   final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
   final MediaItem? currentMediaItem = audioHandler.mediaItem.value;
   if (currentMediaItem != null &&
@@ -64,6 +69,10 @@ void playNext(
   MediaItem mediaItem,
   BuildContext context,
 ) {
+  if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+    Logger.root.warning("Cannot add to queue: AudioPlayerHandler not registered");
+    return;
+  }
   final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
   final MediaItem? currentMediaItem = audioHandler.mediaItem.value;
   if (currentMediaItem != null &&

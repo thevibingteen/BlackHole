@@ -28,10 +28,11 @@ class OfflineAudioQuery {
   static OnAudioQuery audioQuery = OnAudioQuery();
   static final RegExp avoid = RegExp(r'[\.\\\*\:\"\?#/;\|]');
 
-  Future<void> requestPermission() async {
-    while (!await audioQuery.permissionsStatus()) {
-      await audioQuery.permissionsRequest();
+  Future<bool> requestPermission() async {
+    if (await audioQuery.permissionsStatus()) {
+      return true;
     }
+    return audioQuery.permissionsRequest();
   }
 
   Future<List<SongModel>> getSongs({
@@ -143,15 +144,23 @@ class OfflineAudioQuery {
     final File file = File('$tempPath/$fileName.png');
 
     if (!await file.exists()) {
-      await file.create();
-      final Uint8List? image = await audioQuery.queryArtwork(
-        id,
-        type,
-        format: format,
-        size: size,
-        quality: quality,
-      );
-      file.writeAsBytesSync(image!);
+      try {
+        final Uint8List? image = await audioQuery.queryArtwork(
+          id,
+          type,
+          format: format,
+          size: size,
+          quality: quality,
+        );
+        if (image != null && image.isNotEmpty) {
+          await file.create(recursive: true);
+          await file.writeAsBytes(image);
+          return file.path;
+        }
+      } catch (e) {
+        Logger.root.severe('Error querying offline artwork for id $id: $e');
+      }
+      return '';
     }
     return file.path;
   }

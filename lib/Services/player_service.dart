@@ -20,6 +20,7 @@
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:blackhole/Helpers/format.dart';
 import 'package:blackhole/Helpers/mediaitem_converter.dart';
 import 'package:blackhole/Screens/Player/audioplayer.dart';
 import 'package:blackhole/Services/youtube_services.dart';
@@ -28,11 +29,22 @@ import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'package:blackhole/Helpers/startup_profiler.dart';
 import 'package:path_provider/path_provider.dart';
 
 // ignore: avoid_classes_with_only_static_members
 class PlayerInvoke {
-  static final AudioPlayerHandler audioHandler = GetIt.I<AudioPlayerHandler>();
+  static bool get isAudioHandlerReady => GetIt.I.isRegistered<AudioPlayerHandler>();
+
+  static AudioPlayerHandler get audioHandler {
+    if (GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      return GetIt.I<AudioPlayerHandler>();
+    }
+    throw StateError(
+      'AudioPlayerHandler is not yet registered in GetIt. '
+      'Ensure startService() completes before accessing audioHandler.',
+    );
+  }
 
   static Future<void> init({
     required List songsList,
@@ -44,6 +56,26 @@ class PlayerInvoke {
     bool shuffle = false,
     String? playlistBox,
   }) async {
+    if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      if (StartupProfiler.hasAudioServiceFailed) {
+        Logger.root.severe(
+          'PlayerInvoke.init aborted: AudioService failed during initialization: '
+          '${StartupProfiler.audioServiceError}',
+        );
+        return;
+      }
+      Logger.root.info('PlayerInvoke.init: waiting for AudioPlayerHandler readiness');
+      try {
+        await StartupProfiler.audioHandlerFuture.timeout(const Duration(seconds: 10));
+      } catch (e) {
+        Logger.root.severe('PlayerInvoke.init: AudioPlayerHandler readiness timed out or failed: $e');
+        return;
+      }
+    }
+    if (!GetIt.I.isRegistered<AudioPlayerHandler>()) {
+      Logger.root.severe('PlayerInvoke.init: AudioPlayerHandler is not registered. Cannot start playback.');
+      return;
+    }
     final int globalIndex = index < 0 ? 0 : index;
     bool? offline = isOffline;
     final List finalList = songsList.where((item) => item != null).toList();
@@ -87,15 +119,17 @@ class PlayerInvoke {
     Directory tempDir,
   ) async {
     String playTitle = response.title;
-    playTitle == ''
-        ? playTitle = response.displayNameWOExt
-        : playTitle = response.title;
-    String playArtist = response.artist!;
-    playArtist == '<unknown>'
-        ? playArtist = 'Unknown'
-        : playArtist = response.artist!;
+    if (playTitle.isEmpty) {
+      playTitle = response.displayNameWOExt;
+    }
+    String playArtist = response.artist ?? 'Unknown';
+    if (playArtist == '<unknown>' || playArtist.isEmpty) {
+      playArtist = 'Unknown';
+    }
 
-    final String playAlbum = response.album!;
+    final String playAlbum = (response.album == null || response.album!.isEmpty)
+        ? 'Unknown'
+        : response.album!;
     final int playDuration = response.duration ?? 180000;
     final String imagePath = '${tempDir.path}/${response.displayNameWOExt}.png';
 
@@ -136,11 +170,10 @@ class PlayerInvoke {
             album: song['album'].toString(),
             artist: song['artist'].toString(),
             duration: Duration(
-              seconds: int.parse(
-                (song['duration'] == null || song['duration'] == 'null')
-                    ? '180'
-                    : song['duration'].toString(),
-              ),
+              seconds: int.tryParse(
+                    FormatResponse.parseDuration(song['duration']),
+                  ) ??
+                  180,
             ),
             title: song['title'].toString(),
             artUri: Uri.file(file.path),

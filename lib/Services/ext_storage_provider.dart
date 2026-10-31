@@ -18,6 +18,8 @@
  */
 
 import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -27,14 +29,27 @@ class ExtStorageProvider {
   static Future<bool> requestPermission(Permission permission) async {
     if (await permission.isGranted) {
       return true;
-    } else {
-      final result = await permission.request();
-      if (result == PermissionStatus.granted) {
-        return true;
-      } else {
-        return false;
+    }
+
+    if (Platform.isAndroid && permission == Permission.storage) {
+      try {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        if (androidInfo.version.sdkInt >= 33) {
+          if (await Permission.audio.isGranted) {
+            return true;
+          }
+          final audioResult = await Permission.audio.request();
+          if (audioResult == PermissionStatus.granted) {
+            return true;
+          }
+        }
+      } catch (e) {
+        Logger.root.warning('Error querying Android SDK version: $e');
       }
     }
+
+    final result = await permission.request();
+    return result == PermissionStatus.granted;
   }
 
   // getting external storage path
@@ -42,52 +57,58 @@ class ExtStorageProvider {
     required String dirName,
     required bool writeAccess,
   }) async {
-    Directory? directory;
-
     try {
-      // checking platform
       if (Platform.isAndroid) {
-        if (await requestPermission(Permission.storage)) {
-          directory = await getExternalStorageDirectory();
-
-          // getting main path
-          final String newPath = directory!.path
-              .replaceFirst('Android/data/com.shadow.blackhole/files', dirName);
-
-          directory = Directory(newPath);
-
-          // checking if directory exist or not
-          if (!await directory.exists()) {
-            // if directory not exists then asking for permission to create folder
-            await requestPermission(Permission.manageExternalStorage);
-            //creating folder
-
-            await directory.create(recursive: true);
-          }
-          if (await directory.exists()) {
-            try {
-              if (writeAccess) {
-                await requestPermission(Permission.manageExternalStorage);
-              }
-              // if directory exists then returning the complete path
-              return newPath;
-            } catch (e) {
-              rethrow;
-            }
-          }
-        } else {
-          return throw 'something went wrong';
+        final Directory? extDir = await getExternalStorageDirectory();
+        if (extDir == null) {
+          final Directory appDocDir = await getApplicationDocumentsDirectory();
+          return appDocDir.path;
         }
+
+        final String targetPath = extDir.path
+            .replaceFirst('Android/data/com.shadow.blackhole/files', dirName);
+        final Directory targetDir = Directory(targetPath);
+
+        bool canUseTarget = false;
+        try {
+          if (await targetDir.exists()) {
+            canUseTarget = true;
+          } else {
+            await requestPermission(Permission.storage);
+            if (writeAccess) {
+              await Permission.manageExternalStorage.request();
+            }
+            await targetDir.create(recursive: true);
+            canUseTarget = await targetDir.exists();
+          }
+        } catch (e) {
+          Logger.root
+              .info('Target directory $targetPath not directly accessible: $e');
+          canUseTarget = false;
+        }
+
+        if (canUseTarget) {
+          return targetPath;
+        }
+
+        // Graceful fallback to app-specific external files directory
+        final Directory fallbackDir = Directory('${extDir.path}/$dirName');
+        if (!await fallbackDir.exists()) {
+          await fallbackDir.create(recursive: true);
+        }
+        return fallbackDir.path;
       } else if (Platform.isIOS) {
-        directory = await getApplicationDocumentsDirectory();
+        final Directory directory = await getApplicationDocumentsDirectory();
         return directory.path;
       } else {
-        directory = await getDownloadsDirectory();
-        return directory!.path;
+        final Directory? directory = await getDownloadsDirectory();
+        return directory?.path ??
+            (await getApplicationDocumentsDirectory()).path;
       }
     } catch (e) {
-      rethrow;
+      Logger.root.severe('Error getting storage directory: $e');
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      return appDocDir.path;
     }
-    return directory.path;
   }
 }

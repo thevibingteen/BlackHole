@@ -724,7 +724,7 @@ class FormatResponse {
         if (moduleMatchesUnselectedLanguage(modTitle, activeLangs)) {
           continue;
         }
-        filteredCollections.add(col);
+        filteredCollections.add(col.toString());
       }
 
       data['collections'] = filteredCollections;

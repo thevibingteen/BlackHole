@@ -24,11 +24,33 @@ import 'package:audiotagger/models/tag.dart';
 import 'package:blackhole/APIs/spotify_api.dart';
 import 'package:blackhole/Helpers/matcher.dart';
 import 'package:blackhole/Helpers/spotify_helper.dart';
+import 'package:hive/hive.dart';
 import 'package:http/http.dart';
 import 'package:logging/logging.dart';
 
 // ignore: avoid_classes_with_only_static_members
 class Lyrics {
+  static Client? customClient;
+  static final Map<String, Future<Map<String, String>>> _inFlightRequests = {};
+  static final Map<String, DateTime> _negativeCache = {};
+  static const Duration _negativeCacheDuration = Duration(minutes: 10);
+  static const String userAgent =
+      'BlackHole v1.15.8 (https://github.com/Sangwan5688/BlackHole)';
+
+  static Box? _getCacheBox() {
+    try {
+      if (Hive.isBoxOpen('cache')) {
+        return Hive.box('cache');
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static String _buildCacheKey(String id, String title, String artist) {
+    if (id.isNotEmpty) return 'lyrics_$id';
+    return 'lyrics_${title.trim().toLowerCase()}_${artist.trim().toLowerCase()}';
+  }
+
   static bool isHtmlOrChallenge(String text) {
     if (text.isEmpty) return false;
     final lower = text.toLowerCase();
@@ -71,9 +93,28 @@ class Lyrics {
   static String cleanArtistName(String artist) {
     if (artist.isEmpty) return '';
     final parts = artist.split(
-      RegExp(r'[,&/]|\bfeat\.?\b|\bft\.?\b', caseSensitive: false),
+      RegExp(r'[,&/|]|\b(?:feat|ft|with)\b\.?', caseSensitive: false),
     );
-    return parts.first.trim();
+    return parts.first.replaceAll(RegExp(r'^[.\s]+'), '').trim();
+  }
+
+  static List<String> extractArtistCandidates(String artist) {
+    if (artist.trim().isEmpty) return [];
+    final rawParts = artist.split(
+      RegExp(r'[,&/|]|\b(?:feat|ft|with)\b\.?', caseSensitive: false),
+    );
+    final Set<String> candidates = {};
+    final trimmedFull = artist.trim();
+    if (trimmedFull.isNotEmpty) {
+      candidates.add(trimmedFull);
+    }
+    for (final p in rawParts) {
+      final t = p.replaceAll(RegExp(r'^[.\s]+'), '').trim();
+      if (t.isNotEmpty && t.length > 1) {
+        candidates.add(t);
+      }
+    }
+    return candidates.toList();
   }
 
   static Future<Map<String, String>> getLyrics({
@@ -83,6 +124,89 @@ class Lyrics {
     required bool saavnHas,
     String? album,
     int? duration,
+    Client? client,
+  }) async {
+    final cacheKey = _buildCacheKey(id, title, artist);
+
+    // 1. Persistent Hive cache check
+    final cacheBox = _getCacheBox();
+    if (cacheBox != null) {
+      final cached = cacheBox.get(cacheKey);
+      if (cached is Map) {
+        final cachedLyrics = cached['lyrics']?.toString() ?? '';
+        if (cachedLyrics.isNotEmpty && !isHtmlOrChallenge(cachedLyrics)) {
+          Logger.root.info('Lyrics cache hit for $title - $artist');
+          return {
+            'lyrics': cachedLyrics,
+            'type': cached['type']?.toString() ?? 'text',
+            'source': cached['source']?.toString() ?? 'Cache',
+            'id': id,
+          };
+        }
+      }
+    }
+
+    // 2. Short-lived negative cache check
+    final negTime = _negativeCache[cacheKey];
+    if (negTime != null) {
+      if (DateTime.now().difference(negTime) < _negativeCacheDuration) {
+        Logger.root.info('Lyrics negative cache hit for $title - $artist');
+        return {
+          'lyrics': '',
+          'type': 'text',
+          'source': '',
+          'id': id,
+        };
+      } else {
+        _negativeCache.remove(cacheKey);
+      }
+    }
+
+    // 3. Deduplicate concurrent in-flight requests for the same track
+    if (_inFlightRequests.containsKey(cacheKey)) {
+      Logger.root.info('Reusing in-flight lyrics request for $title - $artist');
+      return _inFlightRequests[cacheKey]!;
+    }
+
+    final future = _fetchLyricsInternal(
+      id: id,
+      title: title,
+      artist: artist,
+      saavnHas: saavnHas,
+      album: album,
+      duration: duration,
+      client: client,
+    );
+
+    _inFlightRequests[cacheKey] = future;
+    try {
+      final res = await future;
+      if (res['lyrics']!.isNotEmpty && !isHtmlOrChallenge(res['lyrics']!)) {
+        if (cacheBox != null) {
+          cacheBox.put(cacheKey, {
+            'lyrics': res['lyrics'],
+            'type': res['type'],
+            'source': res['source'],
+          });
+        }
+        _negativeCache.remove(cacheKey);
+      } else {
+        _negativeCache[cacheKey] = DateTime.now();
+      }
+      return res;
+    } finally {
+      _inFlightRequests.remove(cacheKey);
+    }
+  }
+
+  static Future<Map<String, String>> _fetchLyricsInternal({
+    required String id,
+    required String title,
+    required String artist,
+    required bool saavnHas,
+    String? album,
+    int? duration,
+    Client? client,
   }) async {
     final Map<String, String> result = {
       'lyrics': '',
@@ -90,6 +214,8 @@ class Lyrics {
       'source': '',
       'id': id,
     };
+
+    final httpClient = client ?? customClient ?? Client();
 
     // 1. Try LRCLIB structured API first (preferred source for synced and plain lyrics)
     try {
@@ -99,6 +225,7 @@ class Lyrics {
         artistName: artist,
         albumName: album,
         duration: duration,
+        client: httpClient,
       );
       if (lrclibRes['lyrics']!.isNotEmpty &&
           !isHtmlOrChallenge(lrclibRes['lyrics']!)) {
@@ -114,7 +241,7 @@ class Lyrics {
     // 2. Try Spotify synced lyrics (if user authenticated or available)
     try {
       Logger.root.info('Getting Synced Lyrics from Spotify');
-      final res = await getSpotifyLyrics(title, artist);
+      final res = await getSpotifyLyrics(title, artist, client: httpClient);
       if (res['lyrics']!.isNotEmpty && !isHtmlOrChallenge(res['lyrics']!)) {
         result['lyrics'] = res['lyrics']!;
         result['type'] = res['type']!;
@@ -129,7 +256,7 @@ class Lyrics {
     if (saavnHas) {
       try {
         Logger.root.info('Getting Lyrics from Saavn');
-        final saavnLyrics = await getSaavnLyrics(id);
+        final saavnLyrics = await getSaavnLyrics(id, client: httpClient);
         if (saavnLyrics.isNotEmpty && !isHtmlOrChallenge(saavnLyrics)) {
           result['lyrics'] = saavnLyrics;
           result['type'] = 'text';
@@ -148,6 +275,7 @@ class Lyrics {
       final mmLyrics = await getMusixMatchLyrics(
         title: cleanSongTitle(title),
         artist: cleanArtistName(artist),
+        client: httpClient,
       );
       if (mmLyrics.isNotEmpty && !isHtmlOrChallenge(mmLyrics)) {
         result['lyrics'] = mmLyrics;
@@ -159,8 +287,6 @@ class Lyrics {
       Logger.root.warning('Error in Musixmatch lyrics lookup: $e');
     }
 
-    // Google scraper is intentionally removed from active fallback chain
-    // to prevent Google challenge/HTML responses from reaching the lyrics renderer.
     if (isHtmlOrChallenge(result['lyrics']!)) {
       result['lyrics'] = '';
     }
@@ -172,6 +298,7 @@ class Lyrics {
     required String artistName,
     String? albumName,
     int? duration,
+    Client? client,
   }) async {
     final Map<String, String> result = {
       'lyrics': '',
@@ -179,71 +306,177 @@ class Lyrics {
       'source': 'LRCLIB',
     };
 
-    final cleanTrackName = cleanSongTitle(trackName);
-    final cleanArtist = cleanArtistName(artistName);
-
-    // 1. Exact track lookup
-    try {
-      final queryParams = <String, String>{
-        'track_name': cleanTrackName,
-        'artist_name': cleanArtist,
-      };
-      if (albumName != null && albumName.isNotEmpty) {
-        queryParams['album_name'] = albumName;
-      }
-      if (duration != null && duration > 0) {
-        queryParams['duration'] = duration.toString();
-      }
-
-      final uri = Uri.https('lrclib.net', '/api/get', queryParams);
-      final res = await get(
-        uri,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'BlackHole/1.0',
-        },
-      ).timeout(const Duration(seconds: 10));
-
-      if (res.statusCode == 200) {
-        final data = json.decode(utf8.decode(res.bodyBytes));
-        if (data is Map) {
-          final synced = data['syncedLyrics']?.toString() ?? '';
-          final plain = data['plainLyrics']?.toString() ?? '';
-          if (synced.isNotEmpty && !isHtmlOrChallenge(synced)) {
-            result['lyrics'] = synced;
-            result['type'] = 'lrc';
-            return result;
-          } else if (plain.isNotEmpty && !isHtmlOrChallenge(plain)) {
-            result['lyrics'] = plain;
-            result['type'] = 'text';
-            return result;
-          }
-        }
-      }
-    } catch (e) {
-      Logger.root.warning('Exact LRCLIB lookup failed: $e');
+    final httpClient = client ?? customClient ?? Client();
+    final cleanTrack = cleanSongTitle(trackName);
+    final artistCandidates = extractArtistCandidates(artistName);
+    if (artistCandidates.isEmpty && artistName.trim().isNotEmpty) {
+      artistCandidates.add(artistName.trim());
     }
 
-    // 2. Search fallback
-    try {
-      final searchUri = Uri.https('lrclib.net', '/api/search', {
-        'q': '$cleanTrackName $cleanArtist',
-      });
-      final searchRes = await get(
-        searchUri,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'BlackHole/1.0',
-        },
-      ).timeout(const Duration(seconds: 10));
+    // Stage 1: Exact track lookup via /api/get across artist candidates
+    for (final candidate in artistCandidates.take(3)) {
+      try {
+        final queryParams = <String, String>{
+          'track_name': cleanTrack,
+          'artist_name': candidate,
+        };
+        if (albumName != null && albumName.trim().isNotEmpty) {
+          queryParams['album_name'] = albumName.trim();
+        }
+        if (duration != null && duration > 0) {
+          queryParams['duration'] = duration.toString();
+        }
 
-      if (searchRes.statusCode == 200) {
-        final list = json.decode(utf8.decode(searchRes.bodyBytes));
-        if (list is List && list.isNotEmpty) {
-          for (final item in list) {
-            if (item is Map) {
+        final uri = Uri.https('lrclib.net', '/api/get', queryParams);
+        final res = await httpClient.get(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': userAgent,
+          },
+        ).timeout(const Duration(seconds: 10));
+
+        if (res.statusCode == 429) {
+          Logger.root.warning(
+            'LRCLIB 429 Rate limited. Retry-After: ${res.headers["retry-after"]}',
+          );
+          return result;
+        }
+
+        if (res.statusCode == 200) {
+          final data = json.decode(utf8.decode(res.bodyBytes));
+          if (data is Map) {
+            final synced = data['syncedLyrics']?.toString() ?? '';
+            final plain = data['plainLyrics']?.toString() ?? '';
+            if (synced.isNotEmpty && !isHtmlOrChallenge(synced)) {
+              result['lyrics'] = synced;
+              result['type'] = 'lrc';
+              return result;
+            } else if (plain.isNotEmpty && !isHtmlOrChallenge(plain)) {
+              result['lyrics'] = plain;
+              result['type'] = 'text';
+              return result;
+            }
+          }
+        } else if (res.statusCode == 404 && queryParams.containsKey('album_name')) {
+          // If exact match failed with album_name, try without album_name
+          queryParams.remove('album_name');
+          final fallbackUri = Uri.https('lrclib.net', '/api/get', queryParams);
+          final fallbackRes = await httpClient.get(
+            fallbackUri,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': userAgent,
+            },
+          ).timeout(const Duration(seconds: 10));
+
+          if (fallbackRes.statusCode == 200) {
+            final data = json.decode(utf8.decode(fallbackRes.bodyBytes));
+            if (data is Map) {
+              final synced = data['syncedLyrics']?.toString() ?? '';
+              final plain = data['plainLyrics']?.toString() ?? '';
+              if (synced.isNotEmpty && !isHtmlOrChallenge(synced)) {
+                result['lyrics'] = synced;
+                result['type'] = 'lrc';
+                return result;
+              } else if (plain.isNotEmpty && !isHtmlOrChallenge(plain)) {
+                result['lyrics'] = plain;
+                result['type'] = 'text';
+                return result;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        Logger.root.warning(
+          'Exact LRCLIB lookup failed for $cleanTrack by $candidate: $e',
+        );
+      }
+    }
+
+    // Stage 2: Search fallback via /api/search with candidate ranking
+    try {
+      final searchQueries = <String>[];
+      if (artistCandidates.isNotEmpty) {
+        searchQueries.add('$cleanTrack ${artistCandidates.first}');
+      } else {
+        searchQueries.add(cleanTrack);
+      }
+
+      for (final query in searchQueries) {
+        final searchUri = Uri.https('lrclib.net', '/api/search', {'q': query});
+        final searchRes = await httpClient.get(
+          searchUri,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': userAgent,
+          },
+        ).timeout(const Duration(seconds: 10));
+
+        if (searchRes.statusCode == 429) {
+          Logger.root.warning('LRCLIB search 429 Rate limited');
+          return result;
+        }
+
+        if (searchRes.statusCode == 200) {
+          final list = json.decode(utf8.decode(searchRes.bodyBytes));
+          if (list is List && list.isNotEmpty) {
+            Map? bestCandidate;
+            int bestScore = -1;
+
+            for (final item in list) {
+              if (item is! Map) continue;
               final synced = item['syncedLyrics']?.toString() ?? '';
               final plain = item['plainLyrics']?.toString() ?? '';
+              if (synced.isEmpty && plain.isEmpty) continue;
+              if (isHtmlOrChallenge(synced) || isHtmlOrChallenge(plain)) continue;
+
+              final itemTrack = (item['trackName']?.toString() ?? '').toLowerCase();
+              final itemArtist = (item['artistName']?.toString() ?? '').toLowerCase();
+              final cleanTrackLower = cleanTrack.toLowerCase();
+
+              if (!itemTrack.contains(cleanTrackLower) && !cleanTrackLower.contains(itemTrack)) {
+                continue;
+              }
+
+              int score = 0;
+              if (itemTrack == cleanTrackLower) score += 40;
+
+              bool artistMatched = false;
+              for (final c in artistCandidates) {
+                final cLower = c.toLowerCase();
+                if (itemArtist.contains(cLower) || cLower.contains(itemArtist)) {
+                  artistMatched = true;
+                  score += 30;
+                  break;
+                }
+              }
+
+              if (duration != null && duration > 0 && item['duration'] != null) {
+                final itemDur = (item['duration'] as num).toInt();
+                final diff = (itemDur - duration).abs();
+                if (diff <= 5) {
+                  score += 30;
+                } else if (diff <= 15) {
+                  score += 20;
+                } else if (diff > 30) {
+                  continue;
+                }
+              } else if (artistMatched) {
+                score += 10;
+              }
+
+              if (synced.isNotEmpty) score += 10;
+
+              if (score > bestScore) {
+                bestScore = score;
+                bestCandidate = item;
+              }
+            }
+
+            if (bestCandidate != null && bestScore >= 40) {
+              final synced = bestCandidate['syncedLyrics']?.toString() ?? '';
+              final plain = bestCandidate['plainLyrics']?.toString() ?? '';
               if (synced.isNotEmpty && !isHtmlOrChallenge(synced)) {
                 result['lyrics'] = synced;
                 result['type'] = 'lrc';
@@ -264,12 +497,13 @@ class Lyrics {
     return result;
   }
 
-  static Future<String> getSaavnLyrics(String id) async {
+  static Future<String> getSaavnLyrics(String id, {Client? client}) async {
     try {
+      final httpClient = client ?? customClient ?? Client();
       final Uri lyricsUrl = Uri.parse(
         'https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&lyrics_id=$id&ctx=web6dot0&api_version=4&_format=json',
       );
-      final Response res = await get(
+      final Response res = await httpClient.get(
         lyricsUrl,
         headers: {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 10));
@@ -294,8 +528,9 @@ class Lyrics {
 
   static Future<Map<String, String>> getSpotifyLyrics(
     String title,
-    String artist,
-  ) async {
+    String artist, {
+    Client? client,
+  }) async {
     final Map<String, String> result = {
       'lyrics': '',
       'type': 'text',
@@ -334,7 +569,7 @@ class Lyrics {
             artist2: artist2,
           )) {
             final Map<String, String> res =
-                await getSpotifyLyricsFromId(trackId);
+                await getSpotifyLyricsFromId(trackId, client: client);
             result['lyrics'] = res['lyrics']!;
             result['type'] = res['type']!;
             result['source'] = res['source']!;
@@ -354,19 +589,21 @@ class Lyrics {
   }
 
   static Future<Map<String, String>> getSpotifyLyricsFromId(
-    String trackId,
-  ) async {
+    String trackId, {
+    Client? client,
+  }) async {
     final Map<String, String> result = {
       'lyrics': '',
       'type': 'text',
       'source': 'Spotify',
     };
     try {
+      final httpClient = client ?? customClient ?? Client();
       final Uri lyricsUrl = Uri.https('spotify-lyric-api.herokuapp.com', '/', {
         'trackid': trackId,
         'format': 'lrc',
       });
-      final Response res = await get(
+      final Response res = await httpClient.get(
         lyricsUrl,
         headers: {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 10));
@@ -467,10 +704,11 @@ class Lyrics {
     }
   }
 
-  static Future<String> getLyricsLink(String song, String artist) async {
+  static Future<String> getLyricsLink(String song, String artist, {Client? client}) async {
     const String authority = 'www.musixmatch.com';
     final String unencodedPath = '/search/$song $artist';
-    final Response res = await get(
+    final httpClient = client ?? customClient ?? Client();
+    final Response res = await httpClient.get(
       Uri.https(authority, unencodedPath),
     ).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return '';
@@ -479,10 +717,11 @@ class Lyrics {
     return result == null ? '' : result[1]!;
   }
 
-  static Future<String> scrapLink(String unencodedPath) async {
+  static Future<String> scrapLink(String unencodedPath, {Client? client}) async {
     Logger.root.info('Trying to scrap lyrics from $unencodedPath');
     const String authority = 'www.musixmatch.com';
-    final Response res = await get(
+    final httpClient = client ?? customClient ?? Client();
+    final Response res = await httpClient.get(
       Uri.https(authority, unencodedPath),
     ).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return '';
@@ -499,12 +738,13 @@ class Lyrics {
   static Future<String> getMusixMatchLyrics({
     required String title,
     required String artist,
+    Client? client,
   }) async {
     try {
-      final String link = await getLyricsLink(title, artist);
+      final String link = await getLyricsLink(title, artist, client: client);
       Logger.root.info('Found Musixmatch Lyrics Link: $link');
       if (link.isEmpty) return '';
-      final String lyrics = await scrapLink(link);
+      final String lyrics = await scrapLink(link, client: client);
       return lyrics;
     } catch (e) {
       Logger.root.severe('Error in getMusixMatchLyrics', e);
