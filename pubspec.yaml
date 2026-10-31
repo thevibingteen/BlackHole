@@ -4,7 +4,7 @@ description: An Open Source Music Player App.
 # Prevent accidental publishing to pub.dev.
 publish_to: "none"
 
-version: 1.15.8+39
+version: 1.15.9+40
 
 environment:
   sdk: ">=2.18.0 <4.0.0"
@@ -15,18 +15,18 @@ dependencies:
   audio_service: ^0.18.10
   audiotagger: 2.2.1
   # bitsdojo_window: ^0.1.1+1 #For Desktops
-  cached_network_image: ^3.2.3
-  carousel_slider: ^4.2.1
-  connectivity_plus: ^4.0.1
-  cupertino_icons: ^1.0.5
+  cached_network_image: ^3.3.1
+  carousel_slider: ^5.1.2
+  connectivity_plus: ^6.1.4
+  cupertino_icons: ^1.0.9
   dart_des: ^1.0.2
-  device_info_plus: ^9.0.2
-  file_picker: ^5.3.2
+  device_info_plus: ^10.1.2
+  file_picker: ^8.3.7
   flip_card: ^0.7.0
   flutter:
     sdk: flutter
   flutter_archive: ^5.0.0
-  flutter_displaymode: ^0.6.0
+  flutter_displaymode: ^0.7.0
   # flutter_downloader: ^1.7.1
   flutter_localizations:
     sdk: flutter
@@ -38,27 +38,36 @@ dependencies:
   just_audio: ^0.9.34
   # Discontinued, Use just_audio_windows instead.
   # just_audio_libwinmedia: ^0.0.4 # For windows and linux.
-  logging: ^1.2.0
-  marquee: ^2.2.3
+  logging: ^1.3.0
+  marquee: ^2.3.0
   material_design_icons_flutter: 5.0.5955-rc.1
   metadata_god: ^0.4.1
   on_audio_query: ^2.9.0
-  package_info_plus: ^4.0.2
-  palette_generator: ^0.3.3+2
-  path_provider: ^2.0.15
-  permission_handler: ^10.3.0
+  package_info_plus: ^8.3.0
+  palette_generator: ^0.3.3+7
+  path_provider: ^2.1.5
+  permission_handler: ^11.3.1
   receive_sharing_intent: ^1.4.5
   salomon_bottom_bar: ^3.3.2
   share_plus: ^7.0.2
   sliding_up_panel: ^2.0.0+1
-  url_launcher: ^6.1.11
+  url_launcher: ^6.3.3
   uuid: ^3.0.7
   youtube_explode_dart: 2.5.3
 
 dependency_overrides:
+  receive_sharing_intent:
+    path: packages/receive_sharing_intent
+  sqflite: 2.4.5
+  sqflite_android: 2.4.5
+  audiotagger:
+    path: packages/audiotagger
+  flutter_plugin_android_lifecycle: 2.0.35
   collection: 1.17.1
   flutter_rust_bridge: 1.81.0
   http_parser: 4.0.2
+  material_design_icons_flutter:
+    path: packages/material_design_icons_flutter
 
 dev_dependencies:
   flutter_test:

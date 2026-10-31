@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         android:minSdkVersion="30" />
@@ -118,14 +120,17 @@
                 <data android:scheme="https" />
                 <data android:host="*spotify.com" />
             </intent-filter>
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.BROWSABLE" />
                 <category android:name="android.intent.category.DEFAULT" />
 
+                <data android:scheme="http" />
                 <data android:scheme="https" />
                 <data android:host="*youtube.com" />
+                <data android:host="youtu.be" />
+                <data android:host="*youtu.be" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.GET_CONTENT" />
@@ -140,7 +145,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="" />
                 <data android:scheme="file" />
                 <data android:scheme="ftp" />
                 <data android:scheme="ftps" />
@@ -160,7 +164,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="" />
                 <data android:scheme="file" />
                 <data android:scheme="ftp" />
                 <data android:scheme="content" />
@@ -289,7 +292,6 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="" />
                 <data android:scheme="http" />
                 <data android:scheme="https" />
                 <data android:scheme="file" />
